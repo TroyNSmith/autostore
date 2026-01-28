@@ -11,7 +11,7 @@ sys.path.append(current_script_dir)
 project = "autostore"
 copyright = "2026 Andreas V. Copan"
 author = "Andreas V. Copan"
-release = metadata.version("autostore")
+release = metadata.version("automech-autostore")
 
 # 2. General configuration
 extensions = [

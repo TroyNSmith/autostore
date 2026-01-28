@@ -4,13 +4,13 @@ platforms = ["linux-64", "osx-64", "osx-arm64"]
 preview = ["pixi-build"]
 
 [dependencies]
-autostore = { path = "." }
+automech-autostore = { path = "." }
 
 [pypi-dependencies]
 qcio = ">=0.16.2"
 
 [package]
-name = "autostore"
+name = "automech-autostore"
 version = "0.0.0"
 
 [package.build]
