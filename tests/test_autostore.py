@@ -1,18 +1,55 @@
 """autostore tests."""
 
-import autostore
+from collections.abc import Iterator
+
+import pytest
+from qcio import Results
+from sqlmodel import select
+
+from autostore import Database, EnergyRow, write
 
 
-def test_stub() -> None:
+@pytest.fixture
+def database() -> Iterator[Database]:
+    """In-memory database fixture."""
+    db = Database(":memory:")
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+@pytest.fixture
+def water_energy_results() -> Results:
+    """Water energy calculation results fixture."""
+    return Results.model_validate(
+        {
+            "input_data": {
+                "structure": {
+                    "symbols": ["O", "H", "H"],
+                    "geometry": [
+                        [0.0, 0.0, 0.0],
+                        [1.8897261259082012, 0.0, 0.0],
+                        [0.0, 1.8897261259082012, 0.0],
+                    ],
+                    "charge": 0,
+                    "multiplicity": 1,
+                },
+                "model": {"method": "gfn2", "basis": None},
+                "calctype": "energy",
+            },
+            "success": True,
+            "data": {"energy": -5.062316802835694},
+            "provenance": {"program": "crest", "program_version": "3.0.2"},
+        }
+    )
+
+
+def test_energy(water_energy_results: Results, database: Database) -> None:
     """Stub test to ensure the test suite runs."""
-    print(autostore.__version__)  # noqa: T201
+    write.energy(water_energy_results, database)
 
-
-def test__greet() -> None:
-    """Test the greet function."""
-    assert autostore.greet("World") == "Hello, World!"
-
-
-def test__greet_jim() -> None:
-    """Test the greet_jim function."""
-    assert autostore.greet_jim() == "Hello, Jim!"
+    with database.session() as session:
+        ene_rows = session.exec(select(EnergyRow)).all()
+        for ene_row in ene_rows:
+            print(repr(ene_row))  # noqa: T201

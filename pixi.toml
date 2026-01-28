@@ -6,6 +6,9 @@ preview = ["pixi-build"]
 [dependencies]
 autostore = { path = "." }
 
+[pypi-dependencies]
+qcio = ">=0.16.2"
+
 [package]
 name = "autostore"
 version = "0.0.0"

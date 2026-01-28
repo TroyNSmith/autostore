@@ -1,0 +1,205 @@
+"""Models."""
+
+from typing import Optional
+
+from qcio import ProgramInput, Results, Structure
+from sqlalchemy.types import JSON
+from sqlmodel import Column, Field, Relationship, SQLModel
+
+
+class GeometryRow(SQLModel, table=True):
+    """
+    Molecular geometry table row.
+
+    Parameters
+    ----------
+    id
+        Primary key.
+    symbols
+        Atomic symbols in order (e.g., ``["H", "O", "H"]``).
+        The length of ``symbols`` must match the number of atoms.
+    coordinates
+        Cartesian coordinates of the atoms in Angstroms.
+        Shape is ``(len(symbols), 3)`` and the ordering corresponds to ``symbols``.
+    charge
+        Total molecular charge.
+    spin
+        Number of unpaired electrons, i.e. two times the spin quantum number (``2S``).
+
+    energy
+        Relationship to the associated energy record, if present.
+    """
+
+    __tablename__ = "geometry"
+
+    id: int | None = Field(default=None, primary_key=True)
+    symbols: list[str] = Field(sa_column=Column(JSON))
+    coordinates: list[list[float]] = Field(sa_column=Column(JSON))
+    charge: int = 0
+    spin: int = 0
+
+    energy: Optional["EnergyRow"] = Relationship(back_populates="geometry")
+
+    @classmethod
+    def from_results(cls, res: Results) -> "GeometryRow":
+        """
+        Instantiate a GeometryRow from a QCIO Results object.
+
+        Parameters
+        ----------
+        res
+            QCIO Results object.
+
+        Returns
+        -------
+            GeometryRow instance.
+
+        Raises
+        ------
+        NotImplementedError
+            If instantiation from the given input data type is not implemented.
+        """
+        if isinstance(res.input_data, ProgramInput):
+            struc: Structure = res.input_data.structure
+            return cls(
+                symbols=struc.symbols,
+                coordinates=struc.geometry.tolist(),
+                charge=struc.charge,
+                spin=struc.multiplicity - 1,
+            )
+
+        msg = f"Instantiation from {type(res.input_data)} not yet implemented."
+        raise NotImplementedError(msg)
+
+    # Validate coordinates shape with a field validator:
+    #    @field_validator("coordinates")
+    #    @classmethod
+    #    def validate_shape(cls, v):
+    #        if not all(len(row) == 3 for row in v):
+    #            raise ValueError("Coordinates must be shape (N, 3)")  # noqa: ERA001
+    #        return v  # noqa: ERA001
+
+    # Add formula field for indexing:
+    #    formula: str = Field(sa_column=Column(String, nullable=False, index=True))  # noqa: E501, ERA001
+
+    # Define symbols -> formula conversion function:
+    #    def formula_from_symbols(symbols: list[str]) -> str
+
+    # Attach SQLAlchemy event listener to auto-set formula on insert:
+    #     from sqlalchemy import event  # noqa: ERA001
+    #     @event.listens_for(GeometryRow, "before_insert")
+    #     @event.listens_for(GeometryRow, "before_update")
+    #     def populate_formula(mapper, connection, target: GeometryRow):
+    #         target.formula = formula_from_symbols(target.symbols)  # noqa: ERA001
+    # This will implement the symbol-formula sync at the ORM level, so that they
+    # automatically stay in sync with any inserts or updates.
+
+
+class CalculationRow(SQLModel, table=True):
+    """
+    Calculation table row.
+
+    Parameters
+    ----------
+    id
+        Primary key.
+    program
+        The quantum chemistry program used (e.g., "Psi4", "Gaussian").
+    version
+        The version of the program used.
+    method
+        Computational method (e.g., "B3LYP", "MP2").
+    basis
+        Basis set, if applicable.
+    input
+        Input file for the calculation, if applicable.
+
+    energy
+        Relationship to the associated energy record, if present.
+
+    Notes
+    -----
+    Additional fields such as keywords, cmdline_args, and files may be added in
+    the future to support programs that do not use an input file.
+    """
+
+    __tablename__ = "calculation"
+
+    id: int | None = Field(default=None, primary_key=True)
+    program: str
+    version: str
+    method: str
+    basis: str | None = None
+    input: str | None = None
+
+    energy: Optional["EnergyRow"] = Relationship(back_populates="calculation")
+
+    @classmethod
+    def from_results(cls, res: Results) -> "CalculationRow":
+        """
+        Instantiate a CalculationRow from a QCIO Results object.
+
+        Parameters
+        ----------
+        res
+            QCIO Results object.
+
+        Returns
+        -------
+            CalculationRow instance.
+
+        Raises
+        ------
+        NotImplementedError
+            If instantiation from the given input data type is not implemented.
+        """
+        if isinstance(res.input_data, ProgramInput):
+            return cls(
+                program=res.provenance.program,
+                version=res.provenance.program_version,
+                method=res.input_data.model.method,
+                basis=res.input_data.model.basis,
+            )
+
+        msg = f"Instantiation from {type(res.input_data)} not yet implemented."
+        raise NotImplementedError(msg)
+
+    # Eventually add missing QCIO `ProgramArgs` fields:
+    #   - keywords
+    #   - cmdline_args
+    #   - files
+    # These could be used for programs like PySCF that do not use an input file.
+
+
+class EnergyRow(SQLModel, table=True):
+    """
+    Energy table row.
+
+    Parameters
+    ----------
+    geometry_id
+        Foreign key referencing the geometry table; part of the composite primary key.
+    calculation_id
+        Foreign key referencing the calculation table; part of the composite
+        primary key.
+    value
+        Energy in Hartree.
+
+    calculation
+        Relationship to the associated calculation record.
+    geometry
+        Relationship to the associated geometry record.
+    """
+
+    __tablename__ = "energy"
+
+    geometry_id: int | None = Field(
+        default=None, foreign_key="geometry.id", primary_key=True
+    )
+    calculation_id: int | None = Field(
+        default=None, foreign_key="calculation.id", primary_key=True
+    )
+    value: float
+
+    calculation: CalculationRow = Relationship(back_populates="energy")
+    geometry: GeometryRow = Relationship(back_populates="energy")
