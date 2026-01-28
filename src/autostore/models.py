@@ -2,9 +2,11 @@
 
 from typing import Optional
 
-from qcio import ProgramInput, Results, Structure
+from qcio import ProgramInput, Results
 from sqlalchemy.types import JSON
 from sqlmodel import Column, Field, Relationship, SQLModel
+
+from . import qc
 
 
 class GeometryRow(SQLModel, table=True):
@@ -60,12 +62,13 @@ class GeometryRow(SQLModel, table=True):
             If instantiation from the given input data type is not implemented.
         """
         if isinstance(res.input_data, ProgramInput):
-            struc: Structure = res.input_data.structure
+            geo = qc.structure.geometry(res.input_data.structure)
             return cls(
-                symbols=struc.symbols,
-                coordinates=struc.geometry.tolist(),
-                charge=struc.charge,
-                spin=struc.multiplicity - 1,
+                symbols=geo.symbols,
+                # Need to find a better approach to typing the coordinates field!!
+                coordinates=geo.coordinates.tolist(),  # ty:ignore[unresolved-attribute]
+                charge=geo.charge,
+                spin=geo.spin,
             )
 
         msg = f"Instantiation from {type(res.input_data)} not yet implemented."
