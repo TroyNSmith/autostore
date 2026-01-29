@@ -1,9 +1,20 @@
 """Calculation specification tests."""
 
 import pytest
+from automol import Geometry
+from qcio import CalcType
 
 from autostore import Calculation, calcn
 from autostore.calcn import hash_registry
+
+
+@pytest.fixture
+def water() -> Geometry:
+    """Water geometry fixture."""
+    return Geometry(
+        symbols=["O", "H", "H"],
+        coordinates=[[0, 0, 0], [1, 0, 0], [0, 1, 0]],  # ty:ignore[invalid-argument-type]
+    )
 
 
 @pytest.fixture
@@ -54,6 +65,17 @@ def user_defined_hash(calc: Calculation) -> str:
         keywords={"a": {"c": "X", "d": "Y"}, "b": {"c": "X"}},
     )
     return calcn.projected_hash(calc, template)
+
+
+def test__qcio_program_input_conversion(calc: Calculation, water: Geometry) -> None:
+    """Test conversion from QCIO ProgramInput to Calculation."""
+    prog_input = calc.to_qcio_program_input(water, CalcType.energy)
+    calc_roundtrip = Calculation.from_qcio_program_input(prog_input, prog=calc.program)
+    # CalcType was not in original, so set it to None for comparison
+    calc_roundtrip.calctype = None
+    hash1 = calcn.calculation_hash(calc, name="full")
+    hash2 = calcn.calculation_hash(calc_roundtrip, name="full")
+    assert hash1 == hash2, "Hashes differ after QCIO ProgramInput conversion"
 
 
 def test__hash_registry() -> None:

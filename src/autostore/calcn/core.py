@@ -80,6 +80,22 @@ class Calculation(BaseModel):
             extras=self.extras,
         )
 
+    @classmethod
+    def from_qcio_program_input(
+        cls, prog_input: ProgramInput, prog: str
+    ) -> "Calculation":
+        """Create Calculation metadata from QCIO ProgramInput object."""
+        return cls(
+            program=prog,
+            method=prog_input.model.method,
+            basis=prog_input.model.basis,
+            keywords=prog_input.keywords,
+            cmdline_args=prog_input.cmdline_args,
+            files=prog_input.files,  # ty:ignore[invalid-argument-type]
+            calctype=prog_input.calctype.value,
+            extras=prog_input.extras,
+        )
+
 
 def projected_hash(calc: Calculation, template: Calculation | CalculationDict) -> str:
     """

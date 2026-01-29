@@ -137,16 +137,18 @@ class CalculationRow(SQLModel, table=True):
         NotImplementedError
             If instantiation from the given input data type is not implemented.
         """
-        if isinstance(res.input_data, ProgramInput):
+        prog = res.provenance.program
+        prog_input = res.input_data
+        if isinstance(prog_input, ProgramInput):
             return cls(
-                program=res.provenance.program,
-                method=res.input_data.model.method,
-                basis=res.input_data.model.basis,
+                program=prog,
+                method=prog_input.model.method,
+                basis=prog_input.model.basis,
                 input=None,  # Could store input file text here if desired
-                keywords=res.input_data.keywords,
-                cmdline_args=res.input_data.cmdline_args,
-                files=res.input_data.files,
-                calctype=res.input_data.calctype,
+                keywords=prog_input.keywords,
+                cmdline_args=prog_input.cmdline_args,
+                files=prog_input.files,
+                calctype=prog_input.calctype,
                 program_version=res.provenance.program_version,
                 scratch_dir=res.provenance.scratch_dir,
                 wall_time=res.provenance.wall_time,
