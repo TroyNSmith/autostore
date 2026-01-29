@@ -2,10 +2,12 @@
 
 from typing import Optional
 
+from automol import Geometry, geom
 from automol.types import FloatArray
 from pydantic import ConfigDict
 from qcio import ProgramInput, Results
-from sqlalchemy.types import JSON
+from sqlalchemy import event
+from sqlalchemy.types import JSON, String
 from sqlmodel import Column, Field, Relationship, SQLModel
 
 from . import qc
@@ -30,6 +32,8 @@ class GeometryRow(SQLModel, table=True):
         Total molecular charge.
     spin
         Number of unpaired electrons, i.e. two times the spin quantum number (``2S``).
+    hash
+        Optional hash of the geometry for quick comparisons.
 
     energy
         Relationship to the associated energy record, if present.
@@ -44,6 +48,8 @@ class GeometryRow(SQLModel, table=True):
     coordinates: FloatArray = Field(sa_column=Column(FloatArrayTypeDecorator))
     charge: int = 0
     spin: int = 0
+    hash: str = Field(sa_column=Column(String(64), index=True, nullable=True))
+    # ^ Populated by event listener below
 
     energy: Optional["EnergyRow"] = Relationship(back_populates="geometry")
 
@@ -100,6 +106,18 @@ class GeometryRow(SQLModel, table=True):
     #         target.formula = formula_from_symbols(target.symbols)  # noqa: ERA001
     # This will implement the symbol-formula sync at the ORM level, so that they
     # automatically stay in sync with any inserts or updates.
+
+
+@event.listens_for(GeometryRow, "before_insert")
+def populate_geometry_hash(mapper, connection, target: GeometryRow) -> None:  # noqa: ANN001, ARG001
+    """Populate GeometryRow hash before inserts and updates."""
+    geo = Geometry(
+        symbols=target.symbols,
+        coordinates=target.coordinates,
+        charge=target.charge,
+        spin=target.spin,
+    )
+    target.hash = geom.hash(geo)
 
 
 class CalculationRow(SQLModel, table=True):
