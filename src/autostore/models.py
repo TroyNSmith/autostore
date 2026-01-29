@@ -2,11 +2,14 @@
 
 from typing import Optional
 
+from automol.types import FloatArray
+from pydantic import ConfigDict
 from qcio import ProgramInput, Results
 from sqlalchemy.types import JSON
 from sqlmodel import Column, Field, Relationship, SQLModel
 
 from . import qc
+from .types import FloatArrayTypeDecorator
 
 
 class GeometryRow(SQLModel, table=True):
@@ -34,9 +37,11 @@ class GeometryRow(SQLModel, table=True):
 
     __tablename__ = "geometry"
 
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     id: int | None = Field(default=None, primary_key=True)
     symbols: list[str] = Field(sa_column=Column(JSON))
-    coordinates: list[list[float]] = Field(sa_column=Column(JSON))
+    coordinates: FloatArray = Field(sa_column=Column(FloatArrayTypeDecorator))
     charge: int = 0
     spin: int = 0
 
