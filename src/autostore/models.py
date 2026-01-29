@@ -117,7 +117,7 @@ def populate_geometry_hash(mapper, connection, target: GeometryRow) -> None:  # 
         charge=target.charge,
         spin=target.spin,
     )
-    target.hash = geom.hash(geo)
+    target.hash = geom.geometry_hash(geo)
 
 
 class CalculationRow(SQLModel, table=True):
