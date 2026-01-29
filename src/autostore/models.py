@@ -1,5 +1,6 @@
 """Models."""
 
+from pathlib import Path
 from typing import Optional
 
 from automol import Geometry, geom
@@ -11,7 +12,7 @@ from sqlalchemy.types import JSON, String
 from sqlmodel import Column, Field, Relationship, SQLModel
 
 from . import qc
-from .types import FloatArrayTypeDecorator
+from .types import FloatArrayTypeDecorator, PathTypeDecorator
 
 
 class GeometryRow(SQLModel, table=True):
@@ -122,40 +123,79 @@ def populate_geometry_hash(mapper, connection, target: GeometryRow) -> None:  # 
 
 class CalculationRow(SQLModel, table=True):
     """
-    Calculation table row.
+    Calculation metadata table row.
 
     Parameters
     ----------
     id
         Primary key.
     program
-        The quantum chemistry program used (e.g., "Psi4", "Gaussian").
-    version
-        The version of the program used.
+        The quantum chemistry program used (e.g., ``"Psi4"``, ``"Gaussian"``).
     method
-        Computational method (e.g., "B3LYP", "MP2").
+        Computational method (e.g., ``"B3LYP"``, ``"MP2"``).
     basis
         Basis set, if applicable.
     input
         Input file for the calculation, if applicable.
+    keywords
+        QCIO keywords for the calculation.
+    cmdline_args
+        Command line arguments for the calculation.
+    files
+        Additional files required for the calculation.
+    calctype
+        Type of calculation (e.g., ``"energy"``, ``"gradient"``, ``"hessian"``).
+    program_version
+        Version of the quantum chemistry program.
+    scratch_dir
+        Working directory.
+    wall_time
+        Wall time.
+    hostname
+        Name of host machine.
+    hostcpus
+        Number of CPUs on host machine.
+    hostmem
+        Amount of memory on host machine.
+    extras
+        Additional metadata for the calculation.
 
     energy
         Relationship to the associated energy record, if present.
-
-    Notes
-    -----
-    Additional fields such as keywords, cmdline_args, and files may be added in
-    the future to support programs that do not use an input file.
     """
 
     __tablename__ = "calculation"
 
     id: int | None = Field(default=None, primary_key=True)
+    # Input fields:
     program: str
-    version: str
     method: str
     basis: str | None = None
     input: str | None = None
+    keywords: dict[str, str | dict | None] = Field(
+        default_factory=dict,
+        sa_column=Column(JSON),
+    )
+    cmdline_args: list[str] = Field(
+        default_factory=list,
+        sa_column=Column(JSON),
+    )
+    files: dict[str, str] = Field(
+        default_factory=dict,
+        sa_column=Column(JSON),
+    )
+    calctype: str | None = None
+    program_version: str | None = None
+    # Provenance fields:
+    scratch_dir: Path | None = Field(default=None, sa_column=Column(PathTypeDecorator))
+    wall_time: float | None = None
+    hostname: str | None = None
+    hostcpus: int | None = None
+    hostmem: int | None = None
+    extras: dict[str, str | dict | None] = Field(
+        default_factory=dict,
+        sa_column=Column(JSON),
+    )
 
     energy: Optional["EnergyRow"] = Relationship(back_populates="calculation")
 
@@ -181,9 +221,20 @@ class CalculationRow(SQLModel, table=True):
         if isinstance(res.input_data, ProgramInput):
             return cls(
                 program=res.provenance.program,
-                version=res.provenance.program_version,
                 method=res.input_data.model.method,
                 basis=res.input_data.model.basis,
+                input=None,  # Could store input file text here if desired
+                keywords=res.input_data.keywords,
+                cmdline_args=res.input_data.cmdline_args,
+                files=res.input_data.files,
+                calctype=res.input_data.calctype,
+                program_version=res.provenance.program_version,
+                scratch_dir=res.provenance.scratch_dir,
+                wall_time=res.provenance.wall_time,
+                hostname=res.provenance.hostname,
+                hostcpus=res.provenance.hostcpus,
+                hostmem=res.provenance.hostmem,
+                extras=res.input_data.extras,
             )
 
         msg = f"Instantiation from {type(res.input_data)} not yet implemented."

@@ -51,13 +51,24 @@ def hash_full(calc: Calculation) -> str:
     Parameters
     ----------
     calc
-        Calculation specification object.
+        Calculation metadata.
 
     Returns
     -------
         Hash string.
     """
-    return hash_from_dict(calc.model_dump())
+    input_fields = {
+        "program",
+        "method",
+        "basis",
+        "keywords",
+        "cmdline_args",
+        "files",
+        "calctype",
+        "program_version",
+    }
+    calc_dct = calc.model_dump(include=input_fields)
+    return hash_from_dict(calc_dct)
 
 
 @hash_registry.register("minimal")
@@ -68,7 +79,7 @@ def hash_minimal(calc: Calculation) -> str:
     Parameters
     ----------
     calc
-        Calculation specification object.
+        Calculation metadata.
 
     Returns
     -------
@@ -84,12 +95,12 @@ def hash_minimal(calc: Calculation) -> str:
 
 def calculation_hash(calc: Calculation, name: str = "minimal") -> str:
     """
-    Hash calculation using specified hash function from registry.
+    Hash calculation metadata using named hash from registry.
 
     Parameters
     ----------
     calc
-        Calculation specification object.
+        Calculation metadata.
     name
         Hash registry name, e.g. "full" or "minimal". Use
         `hash_registry.available()` to get list of available names.

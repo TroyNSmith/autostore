@@ -1,5 +1,5 @@
 """Types."""
 
-from .sqlalchemy import FloatArrayTypeDecorator
+from .sqlalchemy import FloatArrayTypeDecorator, PathTypeDecorator
 
-__all__ = ["FloatArrayTypeDecorator"]
+__all__ = ["FloatArrayTypeDecorator", "PathTypeDecorator"]

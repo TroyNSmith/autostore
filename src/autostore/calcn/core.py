@@ -1,4 +1,6 @@
-"""Calculation specification data."""
+"""Calculation metadata."""
+
+from pathlib import Path
 
 from pydantic import BaseModel, Field
 
@@ -7,7 +9,7 @@ from .util import CalculationDict, hash_from_dict, project_keywords
 
 class Calculation(BaseModel):
     """
-    Calculation specification.
+    Calculation metadata.
 
     Parameters
     ----------
@@ -29,10 +31,21 @@ class Calculation(BaseModel):
         Type of calculation (e.g., "energy", "gradient", "hessian").
     program_version
         Version of the quantum chemistry program.
+    scratch_dir
+        Working directory.
+    wall_time
+        Wall time.
+    hostname
+        Name of host machine.
+    hostcpus
+        Number of CPUs on host machine.
+    hostmem
+        Amount of memory on host machine.
     extras
-        Additional metadata for the calculation.
+        Additional metadata.
     """
 
+    # Input fields:
     program: str
     method: str
     basis: str | None = None
@@ -42,6 +55,13 @@ class Calculation(BaseModel):
     files: dict[str, str] = Field(default_factory=dict)
     calctype: str | None = None
     program_version: str | None = None
+    # Provenance fields:
+    scratch_dir: Path | None = None
+    wall_time: float | None = None
+    hostname: str | None = None
+    hostcpus: int | None = None
+    hostmem: int | None = None
+    # Extra metadata:
     extras: dict[str, str | dict | None] = Field(default_factory=dict)
 
 
@@ -52,9 +72,9 @@ def projected_hash(calc: Calculation, template: Calculation | CalculationDict) -
     Parameters
     ----------
     calc
-        Calculation specification object.
+        Calculation metadata.
     template
-        Calculation specification object template.
+        Calculation metadata template.
 
     Returns
     -------
@@ -73,9 +93,9 @@ def project(
     Parameters
     ----------
     calc
-        Calculation specification object.
+        Calculation metadata.
     template
-        Calculation specification object template.
+        Calculation metadata template.
 
     Returns
     -------
