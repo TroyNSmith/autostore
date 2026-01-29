@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from qcio import ProgramInput, Results
-from sqlalchemy import event
+from sqlalchemy import UniqueConstraint, event
 from sqlalchemy.types import JSON, String
 from sqlmodel import Column, Field, Relationship, Session, SQLModel
 
@@ -170,15 +170,14 @@ class CalculationHashRow(SQLModel, table=True):
     """
 
     __tablename__ = "calculation_hash"
+    __table_args__ = (UniqueConstraint("name", "value"),)
 
     id: int | None = Field(default=None, primary_key=True)
     calculation_id: int = Field(
         foreign_key="calculation.id", index=True, nullable=False, ondelete="CASCADE"
     )
     name: str = Field(index=True)
-    value: str = Field(
-        sa_column=Column(String(64), index=True, nullable=False, unique=True)
-    )
+    value: str = Field(sa_column=Column(String(64), index=True, nullable=False))
 
     calculation: CalculationRow = Relationship(back_populates="hashes")
 
