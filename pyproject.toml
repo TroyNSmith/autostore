@@ -54,15 +54,27 @@ include = [
 # Import-linter configurations
 [tool.importlinter]
 root_package = "autostore"
+exclude_type_checking_imports = true
 
 [[tool.importlinter.contracts]]
-name = "Module Layering"
+name = "AutoStore Layering"
 type = "layers"
 layers = [
     "autostore.write",
     "autostore.read",
     "autostore.database",
     "autostore.models",
+    "autostore.calcn",
+    "autostore.qc",
+]
+
+[[tool.importlinter.contracts]]
+name = "AutoStore Models Layering"
+type = "layers"
+layers = [
+    "autostore.models.data",
+    "autostore.models.calculation",
+    "autostore.models.geometry",
 ]
 
 # Pytest configurations

@@ -1,127 +1,18 @@
-"""Models."""
+"""Calculation row model and associated models and functions."""
 
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
-from automol import Geometry, geom
-from automol.types import FloatArray
-from pydantic import ConfigDict
 from qcio import ProgramInput, Results
 from sqlalchemy import event
 from sqlalchemy.types import JSON, String
 from sqlmodel import Column, Field, Relationship, Session, SQLModel
 
-from . import qc
-from .calcn import Calculation, calculation_hash, hash_registry
-from .types import FloatArrayTypeDecorator, PathTypeDecorator
+from ..calcn import Calculation, calculation_hash, hash_registry
+from ..types import PathTypeDecorator
 
-
-class GeometryRow(SQLModel, table=True):
-    """
-    Molecular geometry table row.
-
-    Parameters
-    ----------
-    id
-        Primary key.
-    symbols
-        Atomic symbols in order (e.g., ``["H", "O", "H"]``).
-        The length of ``symbols`` must match the number of atoms.
-    coordinates
-        Cartesian coordinates of the atoms in Angstroms.
-        Shape is ``(len(symbols), 3)`` and the ordering corresponds to ``symbols``.
-    charge
-        Total molecular charge.
-    spin
-        Number of unpaired electrons, i.e. two times the spin quantum number (``2S``).
-    hash
-        Optional hash of the geometry for quick comparisons.
-
-    energy
-        Relationship to the associated energy record, if present.
-    """
-
-    __tablename__ = "geometry"
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    id: int | None = Field(default=None, primary_key=True)
-    symbols: list[str] = Field(sa_column=Column(JSON))
-    coordinates: FloatArray = Field(sa_column=Column(FloatArrayTypeDecorator))
-    charge: int = 0
-    spin: int = 0
-    hash: str = Field(
-        sa_column=Column(String(64), index=True, nullable=True, unique=True)
-    )
-    # ^ Populated by event listener below
-
-    energy: Optional["EnergyRow"] = Relationship(back_populates="geometry")
-
-    @classmethod
-    def from_results(cls, res: Results) -> "GeometryRow":
-        """
-        Instantiate a GeometryRow from a QCIO Results object.
-
-        Parameters
-        ----------
-        res
-            QCIO Results object.
-
-        Returns
-        -------
-            GeometryRow instance.
-
-        Raises
-        ------
-        NotImplementedError
-            If instantiation from the given input data type is not implemented.
-        """
-        if isinstance(res.input_data, ProgramInput):
-            geo = qc.structure.geometry(res.input_data.structure)
-            return cls(
-                symbols=geo.symbols,
-                coordinates=geo.coordinates.tolist(),
-                charge=geo.charge,
-                spin=geo.spin,
-            )
-
-        msg = f"Instantiation from {type(res.input_data)} not yet implemented."
-        raise NotImplementedError(msg)
-
-    # Validate coordinates shape with a field validator:
-    #    @field_validator("coordinates")
-    #    @classmethod
-    #    def validate_shape(cls, v):
-    #        if not all(len(row) == 3 for row in v):
-    #            raise ValueError("Coordinates must be shape (N, 3)")  # noqa: ERA001
-    #        return v  # noqa: ERA001
-
-    # Add formula field for indexing:
-    #    formula: str = Field(sa_column=Column(String, nullable=False, index=True))  # noqa: E501, ERA001
-
-    # Define symbols -> formula conversion function:
-    #    def formula_from_symbols(symbols: list[str]) -> str
-
-    # Attach SQLAlchemy event listener to auto-set formula on insert:
-    #     from sqlalchemy import event  # noqa: ERA001
-    #     @event.listens_for(GeometryRow, "before_insert")
-    #     @event.listens_for(GeometryRow, "before_update")
-    #     def populate_formula(mapper, connection, target: GeometryRow):
-    #         target.formula = formula_from_symbols(target.symbols)  # noqa: ERA001
-    # This will implement the symbol-formula sync at the ORM level, so that they
-    # automatically stay in sync with any inserts or updates.
-
-
-@event.listens_for(GeometryRow, "before_insert")
-def populate_geometry_hash(mapper, connection, target: GeometryRow) -> None:  # noqa: ANN001, ARG001
-    """Populate GeometryRow hash before inserts and updates."""
-    geo = Geometry(
-        symbols=target.symbols,
-        coordinates=target.coordinates,
-        charge=target.charge,
-        spin=target.spin,
-    )
-    target.hash = geom.geometry_hash(geo)
+if TYPE_CHECKING:
+    from .data import EnergyRow
 
 
 class CalculationRow(SQLModel, table=True):
@@ -266,12 +157,6 @@ class CalculationRow(SQLModel, table=True):
         msg = f"Instantiation from {type(res.input_data)} not yet implemented."
         raise NotImplementedError(msg)
 
-    # Eventually add missing QCIO `ProgramArgs` fields:
-    #   - keywords
-    #   - cmdline_args
-    #   - files
-    # These could be used for programs like PySCF that do not use an input file.
-
 
 class CalculationHashRow(SQLModel, table=True):
     """
@@ -320,37 +205,3 @@ def populate_calculation_hashes(session, flush_context) -> None:  # noqa: ANN001
                     value=value,
                 )
             )
-
-
-class EnergyRow(SQLModel, table=True):
-    """
-    Energy table row.
-
-    Parameters
-    ----------
-    geometry_id
-        Foreign key referencing the geometry table; part of the composite primary key.
-    calculation_id
-        Foreign key referencing the calculation table; part of the composite
-        primary key.
-    value
-        Energy in Hartree.
-
-    calculation
-        Relationship to the associated calculation record.
-    geometry
-        Relationship to the associated geometry record.
-    """
-
-    __tablename__ = "energy"
-
-    geometry_id: int | None = Field(
-        default=None, foreign_key="geometry.id", primary_key=True
-    )
-    calculation_id: int | None = Field(
-        default=None, foreign_key="calculation.id", primary_key=True
-    )
-    value: float
-
-    calculation: CalculationRow = Relationship(back_populates="energy")
-    geometry: GeometryRow = Relationship(back_populates="energy")
