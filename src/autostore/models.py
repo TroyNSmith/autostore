@@ -20,6 +20,7 @@ from .types import FloatArrayTypeDecorator
 # ===== Core entities
 # NOTE: Organized depth-first (i.e. most independent tables first)
 
+
 class EnergyRow(SQLModel, table=True):
     """
     Energy table row.
@@ -50,8 +51,9 @@ class EnergyRow(SQLModel, table=True):
     )
     value: float
 
-    calculation: CalculationRow = Relationship(back_populates="energy")
-    geometry: GeometryRow = Relationship(back_populates="energy")
+    calculation: "CalculationRow" = Relationship(back_populates="energy")
+    geometry: "GeometryRow" = Relationship(back_populates="energy")
+
 
 class CalculationRow(SQLModel, table=True):
     """
@@ -92,6 +94,10 @@ class CalculationRow(SQLModel, table=True):
 
     energy: Optional["EnergyRow"] = Relationship(back_populates="calculation")
 
+    stationary_points: list["StationaryPointRow"] = Relationship(
+        back_populates="calculation"
+    )
+
     @classmethod
     def from_results(cls, res: Results) -> "CalculationRow":
         """
@@ -127,6 +133,7 @@ class CalculationRow(SQLModel, table=True):
     #   - cmdline_args
     #   - files
     # These could be used for programs like PySCF that do not use an input file.
+
 
 class GeometryRow(SQLModel, table=True):
     """
@@ -165,7 +172,14 @@ class GeometryRow(SQLModel, table=True):
     hash: str = Field(sa_column=Column(String(64), index=True, nullable=True))
     # ^ Populated by event listener below
 
-    energy: Optional["EnergyRow"] = Relationship(back_populates="geometry")
+    energy: list["EnergyRow"] = Relationship(back_populates="geometry")
+    # NOTE: 1 geometry can have different energies (e.g., different methods)
+
+    stationary_points: list["StationaryPointRow"] = Relationship(
+        back_populates="structure"
+    )
+
+    is_canonical: bool = False
 
     @classmethod
     def from_results(cls, res: Results) -> "GeometryRow":
@@ -221,8 +235,10 @@ class GeometryRow(SQLModel, table=True):
     # This will implement the symbol-formula sync at the ORM level, so that they
     # automatically stay in sync with any inserts or updates.
 
+
 # Events
 # NOTE: Clearer to organize entities separate from events
+
 
 @event.listens_for(GeometryRow, "before_insert")
 def populate_geometry_hash(mapper, connection, target: GeometryRow) -> None:  # noqa: ANN001, ARG001
@@ -235,12 +251,14 @@ def populate_geometry_hash(mapper, connection, target: GeometryRow) -> None:  # 
     )
     target.hash = geom.hash(geo)
 
+
 # ====================
 # Stationary Loop
 # ====================
 
 # ===== Core entities
 # NOTE: Organized depth-first (i.e. most independent tables first)
+
 
 class StationaryPointIdentityMetadataRow(SQLModel, table=True):
     """
@@ -273,9 +291,10 @@ class StationaryPointIdentityMetadataRow(SQLModel, table=True):
     attribute: str
     value: str
 
-    identity: "StationaryPointIdentity" = Relationship(
+    identity: "StationaryPointIdentityRow" = Relationship(
         back_populates="identity_metadata"
     )
+
 
 class StationaryPointIdentitySchemeRow(SQLModel, table=True):
     """
@@ -307,17 +326,20 @@ class StationaryPointIdentitySchemeRow(SQLModel, table=True):
 
     type: str
     algorithm: str
-    variant: str 
+    variant: str
     defines_identifier: bool
 
-    identities: list["StationaryPointIdentity"] = Relationship(back_populates="scheme")
+    identities: list["StationaryPointIdentityRow"] = Relationship(
+        back_populates="scheme"
+    )
     # NOTE: stationary point identity scheme constructed as one-to-many with stationary point identity
     # to broaden querying abilities in the future
+
 
 class StationaryPointIdentityRow(SQLModel, table=True):
     """
     Represents an identity assigned to a stationary point.
-    
+
     Parameters
     ----------
     id
@@ -345,12 +367,15 @@ class StationaryPointIdentityRow(SQLModel, table=True):
     scheme_id: int = Field(foreign_key="stationary_point_identity_scheme.id")
     stationary_point_id: int = Field(foreign_key="stationary_point.id")
 
-    scheme: "StationaryPointIdentitySchemeRow" = Relationship(back_populates="identities")
+    scheme: "StationaryPointIdentitySchemeRow" = Relationship(
+        back_populates="identities"
+    )
     stationary_point: "StationaryPointRow" = Relationship(back_populates="identities")
 
     identity_metadata: list["StationaryPointIdentityMetadataRow"] | None = Relationship(
         back_populates="identity", cascade_delete=True
     )
+
 
 class StationaryPointIdentityLink(SQLModel, table=True):
     """
@@ -372,8 +397,13 @@ class StationaryPointIdentityLink(SQLModel, table=True):
 
     __tablename__ = "stationary_point_identity_link"
 
-    stationary_point_id: int = Field(foreign_key="stationary_point.id", primary_key=True)
-    stationary_point_identity_id: int = Field(foreign_key="stationary_point_identity.id", primary_key=True)
+    stationary_point_id: int = Field(
+        foreign_key="stationary_point.id", primary_key=True
+    )
+    stationary_point_identity_id: int = Field(
+        foreign_key="stationary_point_identity.id", primary_key=True
+    )
+
 
 class StationaryPointRow(SQLModel, table=True):
     """
@@ -407,13 +437,13 @@ class StationaryPointRow(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
 
-    structure_id: int = Field(foreign_key="structure.id")
+    structure_id: int = Field(foreign_key="geometry.id")
     calculation_id: int = Field(foreign_key="calculation.id")
 
     order: int
 
-    structure: "Geometry" = Relationship(back_populates="stationary_points")
-    calculation: "Calculation" = Relationship(back_populates="stationary_points")
+    structure: "GeometryRow" = Relationship(back_populates="stationary_points")
+    calculation: "CalculationRow" = Relationship(back_populates="stationary_points")
 
     # stages: list["Stage"] = Relationship(
     #     back_populates="stationary_points", link_model=StationaryPointStageLink
