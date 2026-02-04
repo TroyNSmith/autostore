@@ -9,9 +9,12 @@ from qcio import ProgramInput, Results
 from sqlalchemy import event
 from sqlalchemy.types import JSON, String
 from sqlmodel import Column, Field, Relationship, SQLModel
+from rdkit.Chem import Mol, rdDetermineBonds
 
 from .. import qc
 from ..types import FloatArrayTypeDecorator
+
+from rdkit import Chem
 
 if TYPE_CHECKING:
     from .data import EnergyRow
@@ -77,6 +80,35 @@ class GeometryRow(SQLModel, table=True):
             charge=self.charge,
             spin=self.spin,
         )
+
+    def to_mol(self) -> Mol:
+        """
+        Instantiate an rdkit Mol from a GeometryRow.
+
+        Returns
+        -------
+        Mol
+            rdkit Mol instance.
+        """
+        raw_mol = Chem.MolFromXYZBlock(self.to_xyz())
+        conn_mol = Chem.Mol(raw_mol)
+        rdDetermineBonds.DetermineConnectivity(conn_mol)
+        return conn_mol
+
+    def to_xyz(self) -> str:
+        """
+        Return geometry as a formatted xyz block.
+
+        Returns
+        -------
+        xyz
+            Formatted xyz block.
+        """
+        lines = [f"{len(self.symbols)}", ""]
+        for sym, (x, y, z) in zip(self.symbols, self.coordinates, strict=True):
+            lines.append(f"{sym:<2} {x:12.8f} {y:12.8f} {z:12.8f}")
+
+        return "\n".join(lines)
 
     @classmethod
     def from_results(cls, res: Results) -> "GeometryRow":

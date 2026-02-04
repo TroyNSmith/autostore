@@ -1,2 +1,1 @@
 """Fetch rows from database."""
-
