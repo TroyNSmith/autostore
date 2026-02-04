@@ -15,6 +15,7 @@ from ..types import FloatArrayTypeDecorator
 
 if TYPE_CHECKING:
     from .data import EnergyRow
+    from .stationary import StationaryPointRow
 
 
 class GeometryRow(SQLModel, table=True):
@@ -37,7 +38,6 @@ class GeometryRow(SQLModel, table=True):
         Number of unpaired electrons, i.e. two times the spin quantum number (``2S``).
     hash
         Optional hash of the geometry for quick comparisons.
-
     energy
         Relationship to the associated energy record, if present.
     """
@@ -60,6 +60,24 @@ class GeometryRow(SQLModel, table=True):
         back_populates="geometry", cascade_delete=True
     )
 
+    stationary_point: "StationaryPointRow" = Relationship(back_populates="geometry")
+
+    def to_geom(self) -> "Geometry":
+        """
+        Instantiate an automol Geometry from a GeometryRow.
+
+        Returns
+        -------
+        Geometry
+            automol Geometry instance.
+        """
+        return Geometry(
+            symbols=self.symbols,
+            coordinates=self.coordinates,
+            charge=self.charge,
+            spin=self.spin,
+        )
+
     @classmethod
     def from_results(cls, res: Results) -> "GeometryRow":
         """
@@ -79,17 +97,23 @@ class GeometryRow(SQLModel, table=True):
         NotImplementedError
             If instantiation from the given input data type is not implemented.
         """
-        if isinstance(res.input_data, ProgramInput):
-            geo = qc.structure.geometry(res.input_data.structure)
-            return cls(
-                symbols=geo.symbols,
-                coordinates=geo.coordinates.tolist(),
-                charge=geo.charge,
-                spin=geo.spin,
-            )
+        if hasattr(res.data, "final_structure") and res.data.final_structure:
+            struct = res.data.final_structure
 
-        msg = f"Instantiation from {type(res.input_data)} not yet implemented."
-        raise NotImplementedError(msg)
+        elif isinstance(res.input_data, ProgramInput):
+            struct = res.input_data.structure
+
+        else:
+            msg = f"Instantiation from {type(res.input_data)} not yet implemented."
+            raise NotImplementedError(msg)
+
+        geo = qc.structure.geometry(struct)
+        return cls(
+            symbols=geo.symbols,
+            coordinates=geo.coordinates.tolist(),
+            charge=geo.charge,
+            spin=geo.spin,
+        )
 
     # Validate coordinates shape with a field validator:
     #    @field_validator("coordinates")

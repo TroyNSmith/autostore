@@ -1,4 +1,4 @@
-"""Read from database."""
+"""Read values from database."""
 
 from automol import Geometry, geometry_hash
 from sqlmodel import select

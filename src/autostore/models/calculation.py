@@ -13,6 +13,7 @@ from ..types import PathTypeDecorator
 
 if TYPE_CHECKING:
     from .data import EnergyRow
+    from .stationary import StationaryPointRow
 
 
 class CalculationRow(SQLModel, table=True):
@@ -97,6 +98,7 @@ class CalculationRow(SQLModel, table=True):
     hashes: list["CalculationHashRow"] = Relationship(
         back_populates="calculation", cascade_delete=True
     )
+    stationary_point: "StationaryPointRow" = Relationship(back_populates="calculation")
 
     def to_calculation(self: "CalculationRow") -> Calculation:
         """Reconstruct Calculation object from row."""
@@ -170,7 +172,6 @@ class CalculationHashRow(SQLModel, table=True):
     """
 
     __tablename__ = "calculation_hash"
-    __table_args__ = (UniqueConstraint("name", "value"),)
 
     id: int | None = Field(default=None, primary_key=True)
     calculation_id: int = Field(
