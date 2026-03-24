@@ -3,12 +3,13 @@
 from .calculation import CalculationHashRow, CalculationRow
 from .data import EnergyRow
 from .geometry import GeometryRow
-from .stationary import StationaryPointRow
+from .stationary import IdentityRow, StationaryPointRow
 
 __all__ = [
     "CalculationHashRow",
     "CalculationRow",
     "EnergyRow",
     "GeometryRow",
+    "IdentityRow",
     "StationaryPointRow",
 ]

@@ -28,7 +28,7 @@ def energy(res: Results, db: Database) -> None:
         session.commit()
 
 
-def stationary_point(res: Results, db: Database, *, order: int) -> None:
+def stationary_point(res: Results, db: Database, *, order: int) -> StationaryPointRow:
     """
     Write stationary point to database.
 
@@ -52,3 +52,7 @@ def stationary_point(res: Results, db: Database, *, order: int) -> None:
 
         session.add(stp_row)
         session.commit()
+
+        session.refresh(stp_row, attribute_names=["geometry", "calculation"])
+
+        return stp_row
