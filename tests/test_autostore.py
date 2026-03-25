@@ -8,6 +8,7 @@ from automol import Geometry
 from qcio import Results
 
 from autostore import Calculation, Database, read, write
+from autostore.models import CalculationRow, GeometryRow
 
 
 @pytest.fixture
@@ -68,7 +69,10 @@ def test_energy(
     database: Database,
 ) -> None:
     """Test writing and reading of the energy."""
-    write.energy(water_xtb_energy_results, database)
+    final_energy = water_xtb_energy_results.data.energy
+    geo_row = GeometryRow.from_results(water_xtb_energy_results)
+    calc_row = CalculationRow.from_results(water_xtb_energy_results)
+    write.energy(geo_row, calc_row, value=final_energy, db=database)
     energy = read.energy(water, xtb_calculation, db=database, hash_name="minimal")
     assert energy is not None
     assert np.isclose(energy, -5.062316802835694), f"{energy = }"

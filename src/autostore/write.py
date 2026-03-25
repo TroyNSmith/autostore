@@ -1,64 +1,60 @@
 """Write to database."""
 
-from qcio import Results
-
 from .database import Database
 from .models import CalculationRow, EnergyRow, GeometryRow, StationaryPointRow
 
 
-def energy(res: Results, db: Database) -> None:
+def energy(
+    geo_row: GeometryRow, calc_row: CalculationRow, *, value: float, db: Database
+) -> EnergyRow:
     """
     Write energy to database.
 
     Parameters
     ----------
-    res
-        Calculation results.
+    value
+        Energy result.
+    geo_row
+        Associated GeometryRow object.
+    calc_row
+        Associated CalculationRow object.
     db
         Database connection manager.
     """
     with db.session() as session:
-        geo_row = GeometryRow.from_results(res)
-        calc_row = CalculationRow.from_results(res)
-
-        ene_row = EnergyRow(
-            value=res.data.energy, calculation=calc_row, geometry=geo_row
-        )
+        ene_row = EnergyRow(value=value, calculation=calc_row, geometry=geo_row)
 
         session.add(ene_row)
         session.commit()
+        session.refresh(ene_row, attribute_names=["geometry", "calculation"])
+
+        return ene_row
 
 
-def stationary_point(res: Results, db: Database, *, order: int) -> StationaryPointRow:
+def stationary_point(
+    geo_row: GeometryRow, calc_row: CalculationRow, *, order: int, db: Database
+) -> StationaryPointRow:
     """
     Write stationary point to database.
 
     Parameters
     ----------
-    res
-        Calculation results.
+    geo_row
+        Associated GeometryRow object.
+    calc_row
+        Associated CalculationRow object.
     db
         Database connection manager.
     order
         Order of the stationary point (e.g., minimum = 0, transition = 1)
-
     """
-    final_energy = res.data.energies[-1]
-
     with db.session() as session:
-        geo_row = GeometryRow.from_results(res)
-        calc_row = CalculationRow.from_results(res)
-
         stp_row = StationaryPointRow(
             geometry=geo_row, calculation=calc_row, order=order
         )
 
-        ene_row = EnergyRow(value=final_energy, calculation=calc_row, geometry=geo_row)
-
-        session.add(ene_row)
         session.add(stp_row)
         session.commit()
-
         session.refresh(stp_row, attribute_names=["geometry", "calculation"])
 
         return stp_row

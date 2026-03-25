@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from qcio import ProgramInput, Results
+from qcio import DualProgramInput, ProgramInput, Results
 from sqlalchemy import event
 from sqlalchemy.types import JSON, String
 from sqlmodel import Column, Field, Relationship, Session, SQLModel
@@ -82,6 +82,8 @@ class CalculationRow(SQLModel, table=True):
     calctype: str | None = None
     program_version: str | None = None
     # Provenance fields:
+    superprogram: str | None = None
+    superprogram_version: str | None = None
     scratch_dir: Path | None = Field(default=None, sa_column=Column(PathTypeDecorator))
     wall_time: float | None = None
     hostname: str | None = None
@@ -139,11 +141,34 @@ class CalculationRow(SQLModel, table=True):
         NotImplementedError
             If instantiation from the given input data type is not implemented.
         """
-        prog = res.provenance.program
         prog_input = res.input_data
+
+        if isinstance(prog_input, DualProgramInput):
+            return cls(
+                program=prog_input.subprogram,
+                method=prog_input.subprogram_args.model.method,
+                basis=prog_input.subprogram_args.model.basis,
+                input=None,  # Could store input file text here if desired
+                keywords=prog_input.keywords,
+                cmdline_args=prog_input.cmdline_args,
+                files=prog_input.files,
+                calctype=prog_input.calctype,
+                program_version=res.provenance.extras.get("versions", {}).get(
+                    prog_input.subprogram
+                ),  # NOTE: This is a placeholder for getting the subversion
+                superprogram=res.provenance.program,
+                superprogram_version=res.provenance.program_version,
+                scratch_dir=res.provenance.scratch_dir,
+                wall_time=res.provenance.wall_time,
+                hostname=res.provenance.hostname,
+                hostcpus=res.provenance.hostcpus,
+                hostmem=res.provenance.hostmem,
+                extras=res.input_data.extras,
+            )
+
         if isinstance(prog_input, ProgramInput):
             return cls(
-                program=prog,
+                program=res.provenance.program,
                 method=prog_input.model.method,
                 basis=prog_input.model.basis,
                 input=None,  # Could store input file text here if desired
@@ -177,6 +202,7 @@ class CalculationHashRow(SQLModel, table=True):
     calculation_id: int = Field(
         foreign_key="calculation.id", index=True, nullable=False, ondelete="CASCADE"
     )
+
     name: str = Field(index=True)
     value: str = Field(sa_column=Column(String(64), index=True, nullable=False))
 
