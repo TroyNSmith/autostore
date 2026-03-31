@@ -3,7 +3,7 @@
 from .calculation import CalculationHashRow, CalculationRow
 from .data import EnergyRow
 from .geometry import GeometryRow
-from .stationary import IdentityRow, StationaryPointRow
+from .stationary import IdentityRow, StationaryIdentityLink, StationaryPointRow
 
 __all__ = [
     "CalculationHashRow",
@@ -11,5 +11,6 @@ __all__ = [
     "EnergyRow",
     "GeometryRow",
     "IdentityRow",
+    "StationaryIdentityLink",
     "StationaryPointRow",
 ]

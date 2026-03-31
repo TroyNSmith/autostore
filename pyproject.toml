@@ -60,12 +60,11 @@ exclude_type_checking_imports = true
 name = "AutoStore Layering"
 type = "layers"
 layers = [
+    "autostore.qc",
     "autostore.write",
-    "autostore.read",
     "autostore.database",
     "autostore.models",
     "autostore.calcn",
-    "autostore.qc",
 ]
 
 [[tool.importlinter.contracts]]

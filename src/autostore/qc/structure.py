@@ -1,32 +1,12 @@
 """QCIO Structure interface."""
 
 import pint
-from automol import Geometry
 from qcio import Structure
 
-
-def from_geometry(geo: Geometry) -> Structure:
-    """
-    Generate QCIO Structure from Geometry.
-
-    Parameters
-    ----------
-    geo
-        Geometry.
-
-    Returns
-    -------
-        QCIO Structure.
-    """
-    return Structure(
-        symbols=geo.symbols,
-        geometry=geo.coordinates * pint.Quantity("angstrom").m_as("bohr"),
-        charge=geo.charge,
-        multiplicity=geo.spin + 1,
-    )
+from ..models import GeometryRow
 
 
-def geometry(struc: Structure) -> Geometry:
+def struc_to_row(struc: Structure) -> GeometryRow:
     """
     Generate Geometry from QCIO Structure.
 
@@ -37,9 +17,9 @@ def geometry(struc: Structure) -> Geometry:
 
     Returns
     -------
-        Geometry.
+        GeometryRow
     """
-    return Geometry(
+    return GeometryRow(
         symbols=struc.symbols,
         coordinates=struc.geometry * pint.Quantity("bohr").m_as("angstrom"),
         charge=struc.charge,

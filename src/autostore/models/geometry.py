@@ -1,18 +1,12 @@
-"""Geometry row model and associated models and functions."""
+"""Geometry row model and associated models."""
 
 from typing import TYPE_CHECKING
 
-from automol import Geometry, geom
 from automol.types import FloatArray
 from pydantic import ConfigDict
-from qcio import ProgramInput, Results
-from rdkit import Chem
-from rdkit.Chem import Mol, rdDetermineBonds
-from sqlalchemy import event
 from sqlalchemy.types import JSON, String
 from sqlmodel import Column, Field, Relationship, SQLModel
 
-from .. import qc
 from ..types import FloatArrayTypeDecorator
 
 if TYPE_CHECKING:
@@ -56,95 +50,12 @@ class GeometryRow(SQLModel, table=True):
     hash: str = Field(
         sa_column=Column(String(64), index=True, nullable=True, unique=True)
     )
-    # ^ Populated by event listener below
+    # ^ Populated by event listener in autostore.core.geometry
 
     energies: list["EnergyRow"] = Relationship(
         back_populates="geometry", cascade_delete=True
     )
-
     stationary_point: "StationaryPointRow" = Relationship(back_populates="geometry")
-
-    def to_geom(self) -> "Geometry":
-        """
-        Instantiate an automol Geometry from a GeometryRow.
-
-        Returns
-        -------
-        Geometry
-            automol Geometry instance.
-        """
-        return Geometry(
-            symbols=self.symbols,
-            coordinates=self.coordinates,
-            charge=self.charge,
-            spin=self.spin,
-        )
-
-    def to_mol(self) -> Mol:
-        """
-        Instantiate an rdkit Mol from a GeometryRow.
-
-        Returns
-        -------
-        Mol
-            rdkit Mol instance.
-        """
-        raw_mol = Chem.MolFromXYZBlock(self.to_xyz())
-        conn_mol = Chem.Mol(raw_mol)
-        rdDetermineBonds.DetermineConnectivity(conn_mol)
-        return conn_mol
-
-    def to_xyz(self) -> str:
-        """
-        Return geometry as a formatted xyz block.
-
-        Returns
-        -------
-        xyz
-            Formatted xyz block.
-        """
-        lines = [f"{len(self.symbols)}", ""]
-        for sym, (x, y, z) in zip(self.symbols, self.coordinates, strict=True):
-            lines.append(f"{sym:<2} {x:12.8f} {y:12.8f} {z:12.8f}")
-
-        return "\n".join(lines)
-
-    @classmethod
-    def from_results(cls, res: Results) -> "GeometryRow":
-        """
-        Instantiate a GeometryRow from a QCIO Results object.
-
-        Parameters
-        ----------
-        res
-            QCIO Results object.
-
-        Returns
-        -------
-            GeometryRow instance.
-
-        Raises
-        ------
-        NotImplementedError
-            If instantiation from the given input data type is not implemented.
-        """
-        if hasattr(res.data, "final_structure") and res.data.final_structure:
-            struct = res.data.final_structure
-
-        elif isinstance(res.input_data, ProgramInput):
-            struct = res.input_data.structure
-
-        else:
-            msg = f"Instantiation from {type(res.input_data)} not yet implemented."
-            raise NotImplementedError(msg)
-
-        geo = qc.structure.geometry(struct)
-        return cls(
-            symbols=geo.symbols,
-            coordinates=geo.coordinates.tolist(),
-            charge=geo.charge,
-            spin=geo.spin,
-        )
 
     # Validate coordinates shape with a field validator:
     #    @field_validator("coordinates")
@@ -168,15 +79,3 @@ class GeometryRow(SQLModel, table=True):
     #         target.formula = formula_from_symbols(target.symbols)  # noqa: ERA001
     # This will implement the symbol-formula sync at the ORM level, so that they
     # automatically stay in sync with any inserts or updates.
-
-
-@event.listens_for(GeometryRow, "before_insert")
-def populate_geometry_hash(mapper, connection, target: GeometryRow) -> None:  # noqa: ANN001, ARG001
-    """Populate GeometryRow hash before inserts and updates."""
-    geo = Geometry(
-        symbols=target.symbols,
-        coordinates=target.coordinates,
-        charge=target.charge,
-        spin=target.spin,
-    )
-    target.hash = geom.geometry_hash(geo)

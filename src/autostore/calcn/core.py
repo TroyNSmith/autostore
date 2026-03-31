@@ -3,11 +3,8 @@
 from pathlib import Path
 from typing import Any
 
-from automol import Geometry
 from pydantic import BaseModel, Field
-from qcio import CalcType, DualProgramInput, Model, ProgramArgs, ProgramInput
 
-from .. import qc
 from .util import CalculationDict, hash_from_dict, project_keywords
 
 
@@ -70,71 +67,6 @@ class Calculation(BaseModel):
     hostmem: int | None = None
     # Extra metadata:
     extras: dict[str, str | dict | None] = Field(default_factory=dict)
-
-    def to_qcio_program_input(
-        self, geo: Geometry, calctype: CalcType
-    ) -> DualProgramInput | ProgramInput:
-        """Convert to QCIO ProgramInput object."""
-        model = Model(method=self.method, basis=self.basis)
-
-        if self.superprogram is not None:
-            return DualProgramInput(
-                calctype=calctype,
-                structure=qc.structure.from_geometry(geo),
-                keywords=self.superprogram_keywords,
-                subprogram=self.program,
-                subprogram_args=ProgramArgs(
-                    model=model,
-                    keywords=self.keywords,
-                    cmdline_args=self.cmdline_args,
-                    files=self.files,  # ty:ignore[invalid-argument-type]
-                    extras=self.extras,
-                ),
-            )
-
-        return ProgramInput(
-            calctype=calctype,
-            structure=qc.structure.from_geometry(geo),
-            model=model,
-            keywords=self.keywords,
-            cmdline_args=self.cmdline_args,
-            files=self.files,  # ty:ignore[invalid-argument-type]
-            extras=self.extras,
-        )
-
-    @classmethod
-    def from_qcio_program_input(
-        cls, prog_input: ProgramInput, prog: str
-    ) -> "Calculation":
-        """Create Calculation metadata from QCIO ProgramInput object."""
-        if isinstance(prog_input, DualProgramInput):
-            return cls(
-                program=prog_input.subprogram,
-                method=prog_input.subprogram_args.model.method,
-                basis=prog_input.subprogram_args.model.basis,
-                keywords=prog_input.subprogram_args.keywords,
-                superprogram_keywords=prog_input.keywords,
-                cmdline_args=prog_input.cmdline_args,
-                files=prog_input.files,  # ty:ignore[invalid-argument-type]
-                calctype=prog_input.calctype.value,
-                superprogram=prog,
-                extras=prog_input.extras,
-            )
-
-        if isinstance(prog_input, ProgramInput):
-            return cls(
-                program=prog,
-                method=prog_input.model.method,
-                basis=prog_input.model.basis,
-                keywords=prog_input.keywords,
-                cmdline_args=prog_input.cmdline_args,
-                files=prog_input.files,  # ty:ignore[invalid-argument-type]
-                calctype=prog_input.calctype.value,
-                extras=prog_input.extras,
-            )
-
-        msg = f"Instantiation from {type(prog_input)} not yet implemented."
-        raise NotImplementedError(msg)
 
 
 def projected_hash(calc: Calculation, template: Calculation | CalculationDict) -> str:
