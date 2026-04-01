@@ -12,7 +12,7 @@ qcio = ">=0.16.2"
 
 [package]
 name = "automech-autostore"
-version = "0.0.3"
+version = "0.0.4"
 
 [package.build]
 backend = { name = "pixi-build-python", version = "*" }
