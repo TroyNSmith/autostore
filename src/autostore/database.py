@@ -4,7 +4,6 @@ from pathlib import Path
 
 from sqlmodel import Session, SQLModel, create_engine
 
-from .core import *  # noqa: F403
 from .models import *  # noqa: F403
 
 

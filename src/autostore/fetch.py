@@ -1,6 +1,7 @@
 """Fetch rows from database."""
 
 from automol import Geometry, geometry_hash
+from sqlalchemy import Sequence
 from sqlalchemy.orm import joinedload, selectinload
 from sqlmodel import select
 
@@ -40,9 +41,7 @@ def energy(
     Linked Model Attributes
     -----------------------
         EnergyRow.calculation
-        EnergyRow.calculation.hashes
         EnergyRow.geometry
-        EnergyRow.geometry.stationary_point
     """
     geo_hash = geometry_hash(geo)
     calc_hash = calculation_hash(calc, name=hash_name)
@@ -59,12 +58,10 @@ def energy(
                 CalculationHashRow.name == hash_name,
             )
             .options(
-                # Pre-load calculation and child hashes
-                joinedload(EnergyRow.calculation).selectinload(CalculationRow.hashes),  # ty:ignore[invalid-argument-type]
-                # Pre-load geometry and child stationary point
-                joinedload(EnergyRow.geometry).selectinload(  # ty:ignore[invalid-argument-type]
-                    GeometryRow.stationary_point  # ty:ignore[invalid-argument-type]
-                ),
+                # Pre-load calculation
+                joinedload(EnergyRow.calculation),  # ty:ignore[invalid-argument-type]
+                # Pre-load geometry
+                joinedload(EnergyRow.geometry),  # ty:ignore[invalid-argument-type]
             )
         )
         return session.exec(statement).first()
@@ -89,7 +86,6 @@ def geometry(geo_hash: str, *, db: Database) -> GeometryRow | None:
     -----------------------
         GeometryRow.stationary_point
         GeometryRow.energies
-        GeometryRow.energies.calculation
     """
     with db.session() as session:
         statement = (
@@ -97,7 +93,7 @@ def geometry(geo_hash: str, *, db: Database) -> GeometryRow | None:
             .where(GeometryRow.hash == geo_hash)
             .options(
                 selectinload(GeometryRow.stationary_point),  # ty:ignore[invalid-argument-type]
-                selectinload(GeometryRow.energies).joinedload(EnergyRow.calculation),  # ty:ignore[invalid-argument-type]
+                selectinload(GeometryRow.energies),  # ty:ignore[invalid-argument-type]
             )
         )
         return session.exec(statement).first()
@@ -123,9 +119,6 @@ def identity(algorithm: str, identifier: str, *, db: Database) -> IdentityRow | 
     Linked Model Attributes
     -----------------------
         IdentityRow.stationary_points
-        IdentityRow.calculation
-        IdentityRow.calculation.hashes
-        IdentityRow.geometry
     """
     with db.session() as session:
         statement = (
@@ -135,12 +128,63 @@ def identity(algorithm: str, identifier: str, *, db: Database) -> IdentityRow | 
                 IdentityRow.identifier == identifier,
             )
             .options(
-                selectinload(IdentityRow.stationary_points).options(  # ty:ignore[invalid-argument-type]
-                    joinedload(StationaryPointRow.calculation).selectinload(  # ty:ignore[invalid-argument-type]
-                        CalculationRow.hashes  # ty:ignore[invalid-argument-type]
-                    ),
-                    joinedload(StationaryPointRow.geometry),  # ty:ignore[invalid-argument-type]
-                )
+                selectinload(IdentityRow.stationary_points)  # ty:ignore[invalid-argument-type]
             )
         )
         return session.exec(statement).first()
+
+
+def stationary_point(
+    algorithm: str,
+    identifier: str,
+    calc_hash: str,
+    *,
+    hash_name: str = "minimal",
+    db: Database,
+) -> Sequence[StationaryPointRow] | None:
+    """
+    Fetch StationaryPointRow and pre-load linked models.
+
+    Parameters
+    ----------
+    algorithm
+        Method used to label identity (e.g. "InChI").
+    identifier
+        Unique identity produced by algorithm.
+    hash_name
+        Type of calculation hash to compare against (e.g. "minimal" or "full").
+    db
+        Database connection manager.
+
+    Returns
+    -------
+        IdentityRow.
+
+    Linked Model Attributes
+    -----------------------
+        StationaryPointRow.geometry
+        StationaryPointRow.calculation
+        StationaryPointRow.energy
+        StationaryPointRow.identities
+    """
+    with db.session() as session:
+        statement = (
+            select(StationaryPointRow)
+            .join(StationaryPointRow.identities)  # ty:ignore[invalid-argument-type]
+            .join(StationaryPointRow.calculation)  # ty:ignore[invalid-argument-type]
+            .join(CalculationRow.hashes)  # ty:ignore[invalid-argument-type]
+            .where(
+                IdentityRow.algorithm == algorithm,
+                IdentityRow.identifier == identifier,
+                CalculationHashRow.name == hash_name,
+                CalculationHashRow.value == calc_hash,
+            )
+            # Initializes geometry, calculation, energy, and identities linked fields
+            .options(
+                selectinload(StationaryPointRow.geometry),  # ty:ignore[invalid-argument-type]
+                selectinload(StationaryPointRow.calculation),  # ty:ignore[invalid-argument-type]
+                selectinload(StationaryPointRow.energy),  # ty:ignore[invalid-argument-type]
+                selectinload(StationaryPointRow.identities),  # ty:ignore[invalid-argument-type]
+            )
+        )
+        return session.exec(statement).all()

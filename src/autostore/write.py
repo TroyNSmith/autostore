@@ -69,7 +69,12 @@ def energy(
 
 
 def stationary_point(
-    order: int, *, calc_row: CalculationRow, geo_row: GeometryRow, db: Database
+    order: int,
+    ene_row: EnergyRow | None = None,
+    *,
+    calc_row: CalculationRow,
+    geo_row: GeometryRow,
+    db: Database,
 ) -> StationaryPointRow:
     """
     Write stationary point to database.
@@ -78,6 +83,8 @@ def stationary_point(
     ----------
     order
         Order of the stationary point (e.g., minimum = 0, transition = 1)
+    ene_row
+        Associated EnergyRow object.
     calc_row
         Associated CalculationRow object.
     geo_row
@@ -92,11 +99,14 @@ def stationary_point(
     """
     with db.session() as session:
         stp_row = StationaryPointRow(
-            order=order, geometry=geo_row, calculation=calc_row
+            order=order,
+            geometry=geo_row,
+            calculation=calc_row,
+            energy=ene_row,
         )
 
         session.add(stp_row)
         session.commit()
-        session.refresh(stp_row, attribute_names=["calculation", "geometry"])
+        session.refresh(stp_row, attribute_names=["calculation", "geometry", "energy"])
 
         return stp_row

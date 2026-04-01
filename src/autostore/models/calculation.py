@@ -1,11 +1,13 @@
 """Calculation row model and associated models and functions."""
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
-from sqlalchemy.types import String
-from sqlmodel import JSON, Column, Field, Relationship, SQLModel
+from sqlalchemy import event
+from sqlmodel import JSON, Column, Field, Relationship, Session, SQLModel, String
 
-from ..calcn import Calculation
+from ..calcn import Calculation, calculation_hash, hash_registry
+from ..types import PathTypeDecorator
 
 if TYPE_CHECKING:
     from .data import EnergyRow
@@ -82,6 +84,7 @@ class CalculationRow(Calculation, SQLModel, table=True):
         default_factory=dict,
         sa_column=Column(JSON),
     )
+    scratch_dir: Path | None = Field(default=None, sa_column=Column(PathTypeDecorator))
 
     energies: list["EnergyRow"] = Relationship(
         back_populates="calculation", cascade_delete=True
@@ -112,3 +115,31 @@ class CalculationHashRow(SQLModel, table=True):
     value: str = Field(sa_column=Column(String(64), index=True, nullable=False))
 
     calculation: CalculationRow = Relationship(back_populates="hashes")
+
+
+@event.listens_for(Session, "after_flush")
+def populate_calculation_hashes(session, flush_context) -> None:  # noqa: ANN001, ARG001
+    """Populate the 'minimal' hash for newly added CalculationRow objects."""
+    available = set(hash_registry.available())
+
+    for row in session.new:
+        if not isinstance(row, CalculationRow):
+            continue
+
+        existing = {h.name for h in row.hashes}
+        missing = available - existing
+        if not missing:
+            continue
+
+        calc = row
+
+        for name in missing:
+            value = calculation_hash(calc, name=name)
+
+            session.add(
+                CalculationHashRow(
+                    calculation=row,
+                    name=name,
+                    value=value,
+                )
+            )

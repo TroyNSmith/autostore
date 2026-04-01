@@ -2,8 +2,11 @@
 
 from typing import TYPE_CHECKING
 
+import automol
+from automol import Geometry, geom
 from automol.types import FloatArray
 from pydantic import ConfigDict
+from sqlalchemy import event
 from sqlalchemy.types import JSON, String
 from sqlmodel import Column, Field, Relationship, SQLModel
 
@@ -50,7 +53,7 @@ class GeometryRow(SQLModel, table=True):
     hash: str = Field(
         sa_column=Column(String(64), index=True, nullable=True, unique=True)
     )
-    # ^ Populated by event listener in autostore.core.geometry
+    # ^ Populated by event listener below
 
     energies: list["EnergyRow"] = Relationship(
         back_populates="geometry", cascade_delete=True
@@ -79,3 +82,92 @@ class GeometryRow(SQLModel, table=True):
     #         target.formula = formula_from_symbols(target.symbols)  # noqa: ERA001
     # This will implement the symbol-formula sync at the ORM level, so that they
     # automatically stay in sync with any inserts or updates.
+
+
+def row_to_geometry(geo_row: GeometryRow) -> Geometry:
+    """
+    Instantiate automol Geometry from GeometryRow.
+
+    Parameters
+    ----------
+    geo_row
+        AutoStore GeometryRow object.
+
+    Returns
+    -------
+        Geometry
+    """
+    return Geometry(
+        symbols=geo_row.symbols,
+        coordinates=geo_row.coordinates,
+        charge=geo_row.charge,
+        spin=geo_row.spin,
+    )
+
+
+def row_from_geometry(geo: Geometry) -> GeometryRow:
+    """
+    Instantiate GeometryRow from automol Geometry.
+
+    Parameters
+    ----------
+    geo
+        AutoMol Geometry object.
+
+    Returns
+    -------
+        GeometryRow
+    """
+    return GeometryRow(
+        symbols=geo.symbols,
+        coordinates=geo.coordinates,
+        charge=geo.charge,
+        spin=geo.spin,
+    )
+
+
+def row_from_smiles(smi: str) -> GeometryRow:
+    """
+    Instantiate automol Geometry from GeometryRow.
+
+    Parameters
+    ----------
+    smi
+        SMILES string.
+
+    Returns
+    -------
+        GeometryRow
+    """
+    geo = automol.geom.geo_from_smiles(smi)
+    return row_from_geometry(geo)
+
+
+def row_to_inchi(geo_row: GeometryRow) -> str:
+    """
+    Provide InChI string from AutoMol Geometry.
+
+    Parameters
+    ----------
+    geo_row
+        AutoStore GeometryRow object.
+
+    Returns
+    -------
+        InChI string.
+    """
+    geo = row_to_geometry(geo_row)
+    return automol.geom.geo_to_inchi(geo)
+
+
+# Listeners
+@event.listens_for(GeometryRow, "before_insert")
+def populate_geometry_hash(mapper, connection, target: GeometryRow) -> None:  # noqa: ANN001, ARG001
+    """Populate GeometryRow hash before inserts and updates."""
+    geo = Geometry(
+        symbols=target.symbols,
+        coordinates=target.coordinates,
+        charge=target.charge,
+        spin=target.spin,
+    )
+    target.hash = geom.geometry_hash(geo)
