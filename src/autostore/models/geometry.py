@@ -1,20 +1,20 @@
-"""Geometry row model and associated models and functions."""
+"""Geometry row model and associated models."""
 
 from typing import TYPE_CHECKING
 
+import automol
 from automol import Geometry, geom
 from automol.types import FloatArray
 from pydantic import ConfigDict
-from qcio import ProgramInput, Results
 from sqlalchemy import event
 from sqlalchemy.types import JSON, String
 from sqlmodel import Column, Field, Relationship, SQLModel
 
-from .. import qc
 from ..types import FloatArrayTypeDecorator
 
 if TYPE_CHECKING:
     from .data import EnergyRow
+    from .stationary import StationaryPointRow
 
 
 class GeometryRow(SQLModel, table=True):
@@ -37,7 +37,6 @@ class GeometryRow(SQLModel, table=True):
         Number of unpaired electrons, i.e. two times the spin quantum number (``2S``).
     hash
         Optional hash of the geometry for quick comparisons.
-
     energy
         Relationship to the associated energy record, if present.
     """
@@ -59,37 +58,7 @@ class GeometryRow(SQLModel, table=True):
     energies: list["EnergyRow"] = Relationship(
         back_populates="geometry", cascade_delete=True
     )
-
-    @classmethod
-    def from_results(cls, res: Results) -> "GeometryRow":
-        """
-        Instantiate a GeometryRow from a QCIO Results object.
-
-        Parameters
-        ----------
-        res
-            QCIO Results object.
-
-        Returns
-        -------
-            GeometryRow instance.
-
-        Raises
-        ------
-        NotImplementedError
-            If instantiation from the given input data type is not implemented.
-        """
-        if isinstance(res.input_data, ProgramInput):
-            geo = qc.structure.geometry(res.input_data.structure)
-            return cls(
-                symbols=geo.symbols,
-                coordinates=geo.coordinates.tolist(),
-                charge=geo.charge,
-                spin=geo.spin,
-            )
-
-        msg = f"Instantiation from {type(res.input_data)} not yet implemented."
-        raise NotImplementedError(msg)
+    stationary_point: "StationaryPointRow" = Relationship(back_populates="geometry")
 
     # Validate coordinates shape with a field validator:
     #    @field_validator("coordinates")
@@ -115,6 +84,83 @@ class GeometryRow(SQLModel, table=True):
     # automatically stay in sync with any inserts or updates.
 
 
+def automol_geometry(geo_row: GeometryRow) -> Geometry:
+    """
+    Instantiate automol Geometry from GeometryRow.
+
+    Parameters
+    ----------
+    geo_row
+        AutoStore GeometryRow object.
+
+    Returns
+    -------
+        Geometry
+    """
+    return Geometry(
+        symbols=geo_row.symbols,
+        coordinates=geo_row.coordinates,
+        charge=geo_row.charge,
+        spin=geo_row.spin,
+    )
+
+
+def from_automol_geometry(geo: Geometry) -> GeometryRow:
+    """
+    Instantiate GeometryRow from automol Geometry.
+
+    Parameters
+    ----------
+    geo
+        AutoMol Geometry object.
+
+    Returns
+    -------
+        GeometryRow
+    """
+    return GeometryRow(
+        symbols=geo.symbols,
+        coordinates=geo.coordinates,
+        charge=geo.charge,
+        spin=geo.spin,
+    )
+
+
+def from_smiles(smi: str) -> GeometryRow:
+    """
+    Instantiate automol Geometry from GeometryRow.
+
+    Parameters
+    ----------
+    smi
+        SMILES string.
+
+    Returns
+    -------
+        GeometryRow
+    """
+    geo = automol.geom.from_smiles(smi)
+    return from_automol_geometry(geo)
+
+
+def inchi(geo_row: GeometryRow) -> str:
+    """
+    Provide InChI string from AutoMol Geometry.
+
+    Parameters
+    ----------
+    geo_row
+        AutoStore GeometryRow object.
+
+    Returns
+    -------
+        InChI string.
+    """
+    geo = automol_geometry(geo_row)
+    return automol.geom.inchi(geo)
+
+
+# Listeners
 @event.listens_for(GeometryRow, "before_insert")
 def populate_geometry_hash(mapper, connection, target: GeometryRow) -> None:  # noqa: ANN001, ARG001
     """Populate GeometryRow hash before inserts and updates."""

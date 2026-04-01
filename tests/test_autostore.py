@@ -7,7 +7,7 @@ import pytest
 from automol import Geometry
 from qcio import Results
 
-from autostore import Calculation, Database, read, write
+from autostore import Calculation, Database, fetch, qc, write
 
 
 @pytest.fixture
@@ -68,7 +68,9 @@ def test_energy(
     database: Database,
 ) -> None:
     """Test writing and reading of the energy."""
-    write.energy(water_xtb_energy_results, database)
-    energy = read.energy(water, xtb_calculation, db=database, hash_name="minimal")
+    final_energy = water_xtb_energy_results.data.energy
+    calc_row, geo_row = qc.results.rows(water_xtb_energy_results)
+    write.energy(final_energy, calc_row=calc_row, geo_row=geo_row, db=database)
+    energy = fetch.energy(water, xtb_calculation, hash_name="minimal", db=database)
     assert energy is not None
-    assert np.isclose(energy, -5.062316802835694), f"{energy = }"
+    assert np.isclose(energy.value, -5.062316802835694), f"{energy = }"

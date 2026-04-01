@@ -5,7 +5,7 @@ preview = ["pixi-build"]
 
 [dependencies]
 automech-autostore = { path = "." }
-automol = "==0.0.5"
+automol = "==0.0.6"
 
 [pypi-dependencies]
 qcio = ">=0.16.2"

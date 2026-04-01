@@ -8,6 +8,7 @@ from sqlmodel import Field, Relationship, SQLModel
 
 from .calculation import CalculationRow
 from .geometry import GeometryRow
+from .stationary import StationaryPointRow
 
 
 class EnergyRow(SQLModel, table=True):
@@ -32,13 +33,17 @@ class EnergyRow(SQLModel, table=True):
 
     __tablename__ = "energy"
 
+    id: int | None = Field(default=None, primary_key=True)
+
     geometry_id: int | None = Field(
-        default=None, foreign_key="geometry.id", primary_key=True, ondelete="CASCADE"
+        default=None, foreign_key="geometry.id", ondelete="CASCADE"
     )
     calculation_id: int | None = Field(
-        default=None, foreign_key="calculation.id", primary_key=True, ondelete="CASCADE"
+        default=None, foreign_key="calculation.id", ondelete="CASCADE"
     )
+
     value: float
 
     calculation: CalculationRow = Relationship(back_populates="energies")
     geometry: GeometryRow = Relationship(back_populates="energies")
+    stationary_point: StationaryPointRow = Relationship(back_populates="energy")

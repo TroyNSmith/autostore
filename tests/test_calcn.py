@@ -2,9 +2,9 @@
 
 import pytest
 from automol import Geometry
-from qcio import CalcType
+from qcio import CalcType, DualProgramInput, Structure
 
-from autostore import Calculation, calcn
+from autostore import Calculation, calcn, qc
 from autostore.calcn import hash_registry
 
 
@@ -56,6 +56,31 @@ def calc_keyword_change() -> Calculation:
     )
 
 
+@pytest.fixture
+def standard_calc() -> Calculation:
+    """Define standard single-program calculation."""
+    return Calculation(
+        program="orca",
+        method="b3lyp",
+        basis="6-31g",
+        keywords={"maxiter": 100},
+        calctype="energy",
+    )
+
+
+@pytest.fixture
+def dual_calc() -> Calculation:
+    """Define standard dual-program calculation."""
+    return Calculation(
+        program="crest",
+        method="gfn2",
+        superprogram_keywords={"check": 3},
+        superprogram="geometric",
+        calctype="optimization",
+        keywords={"test_key": True},
+    )
+
+
 @hash_registry.register("user_defined")
 def user_defined_hash(calc: Calculation) -> str:
     """User-defined hash function for testing."""
@@ -67,15 +92,55 @@ def user_defined_hash(calc: Calculation) -> str:
     return calcn.projected_hash(calc, template)
 
 
-def test__qcio_program_input_conversion(calc: Calculation, water: Geometry) -> None:
-    """Test conversion from QCIO ProgramInput to Calculation."""
-    prog_input = calc.to_qcio_program_input(water, CalcType.energy)
-    calc_roundtrip = Calculation.from_qcio_program_input(prog_input, prog=calc.program)
-    # CalcType was not in original, so set it to None for comparison
-    calc_roundtrip.calctype = None
-    hash1 = calcn.calculation_hash(calc, name="full")
-    hash2 = calcn.calculation_hash(calc_roundtrip, name="full")
-    assert hash1 == hash2, "Hashes differ after QCIO ProgramInput conversion"
+@pytest.mark.parametrize("calc_fixture", ["standard_calc", "dual_calc"])
+def test__qcio_roundtrip_equiv(
+    calc_fixture: str, water: Geometry, request: pytest.FixtureRequest
+) -> None:
+    """Test conversion from Calculation -> ProgramInput -> Calculation."""
+    orig_calc: Calculation = request.getfixturevalue(calc_fixture)
+    ctype = CalcType(orig_calc.calctype) if orig_calc.calctype else CalcType.energy
+
+    prog_input = qc.program.from_rows(orig_calc, water, ctype)
+    driver = orig_calc.superprogram if orig_calc.superprogram else orig_calc.program
+
+    round_calc, _ = qc.program.rows(prog_input, prog=driver)
+
+    hash_orig = calcn.calculation_hash(orig_calc, name="minimal")
+    hash_round = calcn.calculation_hash(round_calc, name="minimal")
+
+    assert hash_orig == hash_round, (
+        f"Roundtrip failed for {calc_fixture}. \n"
+        f"Original: {orig_calc.model_dump()} \n"
+        f"Roundtrip: {round_calc.model_dump()} \n"
+    )
+
+
+def test__dual_program_input() -> None:
+    """Test DualProgramInput fields map to Calculation fields."""
+    h2 = Structure(
+        symbols=["H", "H"],
+        geometry=[[0, 0.0, 0.0], [0, 0, 1.4]],
+    )
+
+    prog_input = DualProgramInput(
+        calctype="optimization",  # ty:ignore[invalid-argument-type]
+        structure=h2,
+        subprogram="crest",
+        subprogram_args={
+            "model": {"method": "gfn2"},
+            "keywords": {"test": "value"},
+        },  # ty:ignore[invalid-argument-type]
+        keywords={"check": 3},
+    )
+
+    qc_calc, _ = qc.program.rows(prog_input, prog="geometric")
+
+    assert qc_calc.superprogram == "geometric"
+    assert qc_calc.program == "crest"
+    assert qc_calc.method == "gfn2"
+    assert qc_calc.superprogram_keywords == {"check": 3}
+    assert qc_calc.keywords == {"test": "value"}
+    assert qc_calc.calctype == "optimization"
 
 
 def test__hash_registry() -> None:
