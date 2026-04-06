@@ -221,6 +221,7 @@ class CalculationRow(Calculation, table=True):
 
 2. Utility functions should be hinted to accept the base `Calculation` class, allowing them to process live API data and be stored in database rows without modification.
 
+3. Models should only selectinload for directly connected tables--do not have extensive selectinload going multiple layers out
 ---
 
 ## Questions

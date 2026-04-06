@@ -16,6 +16,8 @@ class Calculation(BaseModel):
     ----------
     program
         The quantum chemistry program used (e.g., "Psi4", "Gaussian").
+    superprogram
+        The geometry optimizer program used (e.g., "geomeTRIC"), if applicable.
     method
         Computational method (e.g., "B3LYP", "MP2").
     basis
@@ -24,6 +26,8 @@ class Calculation(BaseModel):
         Input file for the calculation, if applicable.
     keywords
         QCIO keywords for the calculation.
+    superprogram_keywords
+        Geometry optimizer keywords for the calculation.
     cmdline_args
         Command line arguments for the calculation.
     files
@@ -32,6 +36,8 @@ class Calculation(BaseModel):
         Type of calculation (e.g., "energy", "gradient", "hessian").
     program_version
         Version of the quantum chemistry program.
+    superprogram_version
+        Version of the geometry optimizer program.
     scratch_dir
         Working directory.
     wall_time
@@ -46,8 +52,8 @@ class Calculation(BaseModel):
         Additional metadata.
     """
 
-    # Input fields:
     program: str
+    superprogram: str | None = None
     method: str
     basis: str | None = None
     input: str | None = None
@@ -57,15 +63,12 @@ class Calculation(BaseModel):
     files: dict[str, str] = Field(default_factory=dict)
     calctype: str | None = None
     program_version: str | None = None
-    # Provenance fields:
-    superprogram: str | None = None
     superprogram_version: str | None = None
     scratch_dir: Path | None = None
     wall_time: float | None = None
     hostname: str | None = None
     hostcpus: int | None = None
     hostmem: int | None = None
-    # Extra metadata:
     extras: dict[str, str | dict | None] = Field(default_factory=dict)
 
 

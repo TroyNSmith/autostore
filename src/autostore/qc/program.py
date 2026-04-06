@@ -91,6 +91,6 @@ def rows(prog_input: ProgramInput, prog: str) -> tuple[CalculationRow, GeometryR
             **data,  # ty:ignore[invalid-argument-type]
         )
 
-    geo_row = structure.geometry_row(prog_input.structure)
+    geom_row = structure.geom_row(prog_input.structure)
 
-    return (calc_row, geo_row)
+    return (calc_row, geom_row)

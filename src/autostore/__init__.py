@@ -2,18 +2,15 @@
 
 __version__ = "0.0.4"
 
-from . import fetch, qc, write
+from . import qc
 from .calcn import Calculation
 from .database import Database
-from .models import CalculationRow, EnergyRow, GeometryRow
 
 __all__ = [
+    "query",
     "qc",
     "write",
-    "fetch",
     "Calculation",
+    "models",
     "Database",
-    "CalculationRow",
-    "EnergyRow",
-    "GeometryRow",
 ]

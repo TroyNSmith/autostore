@@ -6,7 +6,7 @@ from ..models import CalculationRow, GeometryRow
 from . import structure
 
 
-def rows(res: Results) -> tuple[CalculationRow, GeometryRow]:
+def calc_row(res: Results) -> CalculationRow:
     """
     Instantiate CalculationRow and GeometryRow from a qcio Results object.
 
@@ -17,7 +17,7 @@ def rows(res: Results) -> tuple[CalculationRow, GeometryRow]:
 
     Returns
     -------
-        tuple[CalculationRow, GeometryRow]
+        CalculationRow
 
     Raises
     ------
@@ -40,7 +40,7 @@ def rows(res: Results) -> tuple[CalculationRow, GeometryRow]:
 
     # Dual vs Single program inputs
     if isinstance(prog_input, DualProgramInput):
-        calc_row = CalculationRow(
+        return CalculationRow(
             program=prog_input.subprogram,
             method=prog_input.subprogram_args.model.method,
             basis=prog_input.subprogram_args.model.basis,
@@ -57,8 +57,8 @@ def rows(res: Results) -> tuple[CalculationRow, GeometryRow]:
             **data,  # ty:ignore[invalid-argument-type]
         )
 
-    elif isinstance(prog_input, ProgramInput):
-        calc_row = CalculationRow(
+    if isinstance(prog_input, ProgramInput):
+        return CalculationRow(
             program=res.provenance.program,
             method=prog_input.model.method,
             basis=prog_input.model.basis,
@@ -70,10 +70,28 @@ def rows(res: Results) -> tuple[CalculationRow, GeometryRow]:
             **data,  # ty:ignore[invalid-argument-type]
         )
 
-    else:
-        msg = f"Instantiation from {type(prog_input)} not implemented."
-        raise NotImplementedError(msg)
+    msg = f"Instantiation from {type(prog_input)} not implemented."
+    raise NotImplementedError(msg)
 
+
+def geom_row(res: Results) -> GeometryRow:
+    """
+    Instantiate GeometryRow from a qcio Results object.
+
+    Parameters
+    ----------
+    res
+        qcio Results object.
+
+    Returns
+    -------
+        GeometryRow
+
+    Raises
+    ------
+    NotImplementedError
+        If instantiation from the given input data type is not implemented.
+    """
     if hasattr(res.data, "final_structure") and res.data.final_structure:
         struct = res.data.final_structure
 
@@ -84,6 +102,4 @@ def rows(res: Results) -> tuple[CalculationRow, GeometryRow]:
         msg = f"Instantiation from {type(res.input_data)} not yet implemented."
         raise NotImplementedError(msg)
 
-    geo_row = structure.geometry_row(struct)
-
-    return (calc_row, geo_row)
+    return structure.geom_row(struct)

@@ -101,7 +101,7 @@ def test__qcio_roundtrip_equiv(
     ctype = CalcType(orig_calc.calctype) if orig_calc.calctype else CalcType.energy
 
     prog_input = qc.program.from_rows(orig_calc, water, ctype)
-    driver = orig_calc.superprogram if orig_calc.superprogram else orig_calc.program
+    driver = orig_calc.superprogram or orig_calc.program
 
     round_calc, _ = qc.program.rows(prog_input, prog=driver)
 
