@@ -10,7 +10,7 @@ from sqlalchemy.types import JSON, String
 from sqlmodel import Column, Field, Relationship, Session, SQLModel, select
 
 from .calcn import Calculation, calculation_hash, hash_registry
-from .types import FloatArrayTypeDecorator, PathTypeDecorator
+from .types import FloatArrayTypeDecorator, PathTypeDecorator, Role
 
 
 # --- Link Models -------------------------------
@@ -51,10 +51,11 @@ class CalculationGeometryLink(SQLModel, table=True):
     """
 
     __tablename__ = "calculation_geometry_link"
+    model_config = ConfigDict(use_enum_values=True)
 
     geometry_id: int = Field(foreign_key="geometry.id", primary_key=True)
     calculation_id: int = Field(foreign_key="calculation.id", primary_key=True)
-    role: str
+    role: Role
 
 
 # --- Calculation Models ------------------------
@@ -213,7 +214,7 @@ def populate_calculation_hashes(session, flush_context) -> None:  # noqa: ANN001
 
             session.add(
                 CalculationHashRow(
-                    calculation=row,
+                    calculation_id=row.id,
                     name=name,
                     value=value,
                 )
@@ -260,8 +261,9 @@ class GeometryRow(Geometry, SQLModel, table=True):
 
     symbols: list[str] = Field(sa_column=Column(JSON))
     coordinates: FloatArray = Field(sa_column=Column(FloatArrayTypeDecorator))
-    hash: str = Field(
-        sa_column=Column(String(64), index=True, nullable=True, unique=True)
+    hash: str | None = Field(
+        sa_column=Column(String(64), index=True, nullable=True, unique=True),
+        default=None,
     )
     # ^ Populated by event listener below
 
@@ -466,13 +468,20 @@ def stationary_post_processing(mapper, connection, target: StationaryPointRow) -
     """Automatically tags InChI and default metrics after inserting StationaryPoint."""
     session = Session(bind=connection)
 
+    if target.id is None:
+        msg = f"{target = } not assigned an id."
+        raise LookupError(msg)
+
     try:
         # NOTE: If target.geometry isn't loaded, we need to fetch it
         geom_stmt = select(GeometryRow).where(GeometryRow.id == target.geometry_id)
         geom_row = session.exec(geom_stmt).first()
 
         if not geom_row:
-            return
+            msg = (
+                f"{target.geometry_id} does not correspond to an entry in the database."
+            )
+            raise LookupError(msg)  # noqa: TRY301
 
         inchi_string = geom.inchi(geom_row)
 
@@ -489,6 +498,10 @@ def stationary_post_processing(mapper, connection, target: StationaryPointRow) -
             )
             session.add(id_row)
             session.flush()
+
+        if id_row.id is None:
+            msg = f"{id_row = } not assigned an id."
+            raise LookupError(msg)  # noqa: TRY301
 
         link = StationaryIdentityLink(stationary_id=target.id, identity_id=id_row.id)
         session.add(link)

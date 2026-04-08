@@ -10,6 +10,7 @@ from qcdata import CalcType, ProgramOutput
 from sqlalchemy import Select
 
 from autostore import Calculation, Database, models, qc
+from autostore.types import Role
 
 
 @pytest.fixture
@@ -89,21 +90,21 @@ def test_energy(
     """Test writing and reading of the energy and corresponding database rows."""
     # Instantiate GeometryRow & write to database
     geom_row = models.GeometryRow(**water.model_dump())
-    geom_id = database.write(row=geom_row)
+    geom_id = database.add(row=geom_row)
     # Ensure id returned
     assert geom_id is not None
 
     # Instantiate CalculationRow & write to database
-    calc_row = qc.prog_output.calc_row(water_xtb_energy_results)
-    calc_id = database.write(row=calc_row)
+    calc_row = qc.prog_output.calculation_row(water_xtb_energy_results)
+    calc_id = database.add(row=calc_row)
     # Ensure id returned
     assert calc_id is not None
 
     # Instantiate CalculationGeometryLinkRow & write to database
     calc_geom_link = models.CalculationGeometryLink(
-        geometry_id=geom_id, calculation_id=calc_id, role="input"
+        geometry_id=geom_id, calculation_id=calc_id, role=Role.input
     )
-    link_id = database.write(row=calc_geom_link)
+    link_id = database.add(row=calc_geom_link)
     # Ensure id not returned
     assert link_id is None
 
@@ -113,7 +114,7 @@ def test_energy(
         calculation_id=calc_id,
         value=water_xtb_energy_results.data.energy,
     )
-    ene_id = database.write(row=ene_row)
+    ene_id = database.add(row=ene_row)
     # Ensure id returned
     assert ene_id is not None
 
@@ -148,17 +149,17 @@ def test_stationary(
     """Test writing and reading of the energy and corresponding database rows."""
     # Instantiate input GeometryRow & write to database
     inp_geom_row = models.GeometryRow(**h2.model_dump())
-    inp_geom_id = database.write(row=inp_geom_row)
+    inp_geom_id = database.add(row=inp_geom_row)
     assert inp_geom_id is not None
 
     # Instantiate CalculationRow & write to database
-    calc_row = qc.prog_output.calc_row(h2_gfnff_stationary_results)
-    calc_id = database.write(row=calc_row)
+    calc_row = qc.prog_output.calculation_row(h2_gfnff_stationary_results)
+    calc_id = database.add(row=calc_row)
     assert calc_id is not None
 
     # Instantiate output GeometryRow & write to database
-    out_geom_row = qc.prog_output.geom_row(h2_gfnff_stationary_results)
-    out_geom_id = database.write(row=out_geom_row)
+    out_geom_row = qc.prog_output.geometry_row(h2_gfnff_stationary_results)
+    out_geom_id = database.add(row=out_geom_row)
     assert out_geom_id is not None
     # Test for the database.query() method
     assert inp_geom_id not in database.query(
@@ -167,23 +168,23 @@ def test_stationary(
 
     # Instantiate CalculationGeometryLinkRows & write to database
     calc_inp_link = models.CalculationGeometryLink(
-        geometry_id=inp_geom_id, calculation_id=calc_id, role="input"
+        geometry_id=inp_geom_id, calculation_id=calc_id, role=Role.input
     )
-    database.write(row=calc_inp_link)
+    database.add(row=calc_inp_link)
 
     calc_out_link = models.CalculationGeometryLink(
-        geometry_id=out_geom_id, calculation_id=calc_id, role="output"
+        geometry_id=out_geom_id, calculation_id=calc_id, role=Role.output
     )
-    database.write(row=calc_out_link)
+    database.add(row=calc_out_link)
 
     # Instantiate StationaryPointRow & write to database
     stp_row = models.StationaryPointRow(
         geometry_id=out_geom_id, calculation_id=calc_id, order=1
     )
-    stp_id = database.write(row=stp_row)
+    stp_id = database.add(row=stp_row)
     assert stp_id is not None
     # Test for the database.fetch() method
-    assert stp_row == database.fetch(model=models.StationaryPointRow, row_id=stp_id)
+    assert stp_row == database.get(model=models.StationaryPointRow, row_id=stp_id)
 
     with database.session() as session:
         # Ensure geometry input and geometry output are unique
@@ -193,7 +194,7 @@ def test_stationary(
             .where(models.CalculationGeometryLink.geometry_id == inp_geom_id)  # ty:ignore[invalid-argument-type]
         )
         calc_inp_link = session.exec(statement).first()[0]  # ty:ignore[no-matching-overload]
-        assert calc_inp_link.role == "input"
+        assert calc_inp_link.role == Role.input
 
         statement = (
             Select(models.CalculationGeometryLink)
@@ -201,6 +202,6 @@ def test_stationary(
             .where(models.CalculationGeometryLink.geometry_id == out_geom_id)  # ty:ignore[invalid-argument-type]
         )
         calc_out_link = session.exec(statement).first()[0]  # ty:ignore[no-matching-overload]
-        assert calc_out_link.role == "output"
+        assert calc_out_link.role == Role.output
 
         assert calc_inp_link != calc_out_link

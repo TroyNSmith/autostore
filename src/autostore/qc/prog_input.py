@@ -2,14 +2,14 @@
 
 import automol
 from automol import Geometry
-from qcdata import CalcType, DualProgramInput, Model, ProgramArgs, ProgramInput
+from qcdata import CalcType, DualProgramInput, Model, ProgramInput
 
 from ..calcn import Calculation
 from ..models import CalculationRow, GeometryRow
 from . import structure
 
 
-def from_auto(
+def from_automech(
     calc: Calculation | CalculationRow,
     geo: Geometry,
     calctype: CalcType,
@@ -41,25 +41,40 @@ def from_auto(
     }
 
     if calc.superprogram:
-        return DualProgramInput(
-            calctype=calctype,
-            structure=struc,
-            keywords=calc.superprogram_keywords,
-            subprogram=calc.program,
-            subprogram_args=ProgramArgs(model=model, **data),  # ty:ignore[invalid-argument-type]
+        return DualProgramInput.model_validate(
+            {
+                "calctype": calctype,
+                "structure": struc,
+                "keywords": calc.superprogram_keywords,
+                "subprogram": calc.program,
+                "subprogram_args": {"model": model, **data},
+            }
         )
 
-    return ProgramInput(
-        calctype=calctype,
-        structure=struc,
-        model=model,
-        **data,  # ty:ignore[invalid-argument-type]
+    return ProgramInput.model_validate(
+        {
+            "calctype": calctype,
+            "structure": struc,
+            "model": model,
+            **data,
+        }
     )
 
 
-def calc_row(prog_input: ProgramInput, *, prog: str) -> CalculationRow:
-    """Extract ProgramInput into a Calculation."""
-    data = {
+def calculation_row(prog_input: ProgramInput, *, prog: str) -> CalculationRow:
+    """
+    Extract ProgramInput into a Calculation.
+
+    Parameters
+    ----------
+    prog_input
+        qc ProgramInput
+
+    Returns
+    -------
+    CalculationRow
+    """
+    base_data = {
         "cmdline_args": prog_input.cmdline_args,
         "files": prog_input.files,
         "calctype": prog_input.calctype.value,
@@ -67,28 +82,38 @@ def calc_row(prog_input: ProgramInput, *, prog: str) -> CalculationRow:
     }
 
     if isinstance(prog_input, DualProgramInput):
-        calc_row = CalculationRow(
-            program=prog_input.subprogram,
-            method=prog_input.subprogram_args.model.method,
-            basis=prog_input.subprogram_args.model.basis,
-            keywords=prog_input.subprogram_args.keywords,
-            superprogram_keywords=prog_input.keywords,
-            superprogram=prog,
-            **data,
-        )
-
+        calc_data = {
+            **base_data,
+            "program": prog_input.subprogram,
+            "method": prog_input.subprogram_args.model.method,
+            "basis": prog_input.subprogram_args.model.basis,
+            "keywords": prog_input.subprogram_args.keywords,
+            "superprogram_keywords": prog_input.keywords,
+            "superprogram": prog,
+        }
     else:
-        calc_row = CalculationRow(
-            program=prog,
-            method=prog_input.model.method,
-            basis=prog_input.model.basis,
-            keywords=prog_input.keywords,
-            **data,
-        )
+        calc_data = {
+            **base_data,
+            "program": prog,
+            "method": prog_input.model.method,
+            "basis": prog_input.model.basis,
+            "keywords": prog_input.keywords,
+        }
 
-    return calc_row
+    return CalculationRow.model_validate(calc_data)
 
 
-def geom_row(prog_input: ProgramInput) -> GeometryRow:
-    """Extract ProgramInput into a Geometry."""
-    return structure.geom_row(prog_input.structure)
+def geometry_row(prog_input: ProgramInput) -> GeometryRow:
+    """
+    Extract ProgramInput into a Geometry.
+
+    Parameters
+    ----------
+    prog_input
+        qc ProgramInput
+
+    Returns
+    -------
+    GeometryRow
+    """
+    return structure.geometry_row(prog_input.structure)

@@ -43,9 +43,9 @@ class Database:
         """Create a new database session."""
         return Session(self.engine)
 
-    def write(self, *, row: ModelT) -> int | None:
+    def add(self, *, row: ModelT) -> int | None:
         """
-        Write row to database.
+        Add row to database.
 
         Parameters
         ----------
@@ -74,9 +74,9 @@ class Database:
             msg = f"Failed to write {row = } to database."
             raise RuntimeError(msg) from e
 
-    def fetch(self, *, model: type[ModelT], row_id: int) -> ModelT:
+    def get(self, *, model: type[ModelT], row_id: int) -> ModelT:
         """
-        Fetch rows based on row id.
+        Get row based on row id.
 
         Parameters
         ----------
@@ -112,9 +112,9 @@ class Database:
 
     def query(
         self, *, model: type[ModelT], **attributes: float | str | None
-    ) -> list[int | None]:
+    ) -> list[int]:
         """
-        Query for existing rows based on Class attributes.
+        Query existing rows based on Class attributes.
 
         Parameters
         ----------
@@ -136,7 +136,13 @@ class Database:
                 if hasattr(model, key):
                     statement = statement.where(getattr(model, key) == value)
 
-            return [getattr(row, "id", None) for row in session.exec(statement).all()]
+            ids = [getattr(row, "id", None) for row in session.exec(statement).all()]
+
+            if None in ids:
+                msg = f"No id field returned from {model.__tablename__} query."
+                raise LookupError(msg)
+
+            return ids  # ty:ignore[invalid-return-type]
 
     def close(self) -> None:
         """Close the database connection.

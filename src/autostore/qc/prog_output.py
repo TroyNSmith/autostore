@@ -6,7 +6,7 @@ from ..models import CalculationRow, GeometryRow
 from . import structure
 
 
-def calc_row(res: ProgramOutput) -> CalculationRow:
+def calculation_row(res: ProgramOutput) -> CalculationRow:
     """
     Instantiate CalculationRow from ProgramOutput.
 
@@ -36,45 +36,46 @@ def calc_row(res: ProgramOutput) -> CalculationRow:
         "hostcpus": prov.hostcpus,
         "hostmem": prov.hostmem,
         "extras": prog_input.extras,
+        "input": None,  # Could store input file text here if desired
     }
 
     # Dual vs Single program inputs
     if isinstance(prog_input, DualProgramInput):
-        return CalculationRow(
-            program=prog_input.subprogram,
-            method=prog_input.subprogram_args.model.method,
-            basis=prog_input.subprogram_args.model.basis,
-            input=None,  # Could store input file text here if desired
-            keywords=prog_input.subprogram_args.keywords,
-            superprogram_keywords=prog_input.keywords,
-            cmdline_args=prog_input.cmdline_args,
-            calctype=prog_input.calctype,
-            program_version=res.provenance.extras.get("versions", {}).get(
+        calc_data = {
+            **data,
+            "program": prog_input.subprogram,
+            "method": prog_input.subprogram_args.model.method,
+            "basis": prog_input.subprogram_args.model.basis,
+            "keywords": prog_input.subprogram_args.keywords,
+            "superprogram_keywords": prog_input.keywords,
+            "cmdline_args": prog_input.cmdline_args,
+            "calctype": prog_input.calctype,
+            "program_version": prov.extras.get("versions", {}).get(
                 prog_input.subprogram
-            ),  # NOTE: This is a placeholder for getting the subversion
-            superprogram=res.provenance.program,
-            superprogram_version=res.provenance.program_version,
+            ),
+            "superprogram": prov.program,
+            "superprogram_version": prov.program_version,
+        }
+    elif isinstance(prog_input, ProgramInput):
+        calc_data = {
             **data,
-        )
+            "program": prov.program,
+            "method": prog_input.model.method,
+            "basis": prog_input.model.basis,
+            "keywords": prog_input.keywords,
+            "cmdline_args": prog_input.cmdline_args,
+            "calctype": prog_input.calctype,
+            "program_version": prov.program_version,
+        }
+    else:
+        msg = f"Instantiation from {type(prog_input)} not implemented."
+        raise NotImplementedError(msg)
 
-    if isinstance(prog_input, ProgramInput):
-        return CalculationRow(
-            program=res.provenance.program,
-            method=prog_input.model.method,
-            basis=prog_input.model.basis,
-            input=None,  # Could store input file text here if desired
-            keywords=prog_input.keywords,
-            cmdline_args=prog_input.cmdline_args,
-            calctype=prog_input.calctype,
-            program_version=res.provenance.program_version,
-            **data,
-        )
-
-    msg = f"Instantiation from {type(prog_input)} not implemented."
-    raise NotImplementedError(msg)
+    # Validate and return
+    return CalculationRow.model_validate(calc_data)
 
 
-def geom_row(res: ProgramOutput) -> GeometryRow:
+def geometry_row(res: ProgramOutput) -> GeometryRow:
     """
     Instantiate GeometryRow from ProgramOutput.
 
@@ -102,4 +103,4 @@ def geom_row(res: ProgramOutput) -> GeometryRow:
         msg = f"Instantiation from {type(res.input_data)} not yet implemented."
         raise NotImplementedError(msg)
 
-    return structure.geom_row(struct)
+    return structure.geometry_row(struct)
