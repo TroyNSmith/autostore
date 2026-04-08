@@ -43,7 +43,7 @@ class Database:
         """Create a new database session."""
         return Session(self.engine)
 
-    def write(self, *, row: ModelT) -> int:
+    def write(self, *, row: ModelT) -> int | None:
         """
         Write row to database.
 
@@ -55,7 +55,7 @@ class Database:
         Returns
         -------
         row_id
-            id corresponding to entry in model table.
+            id corresponding to entry in model table or None if row does not assign id.
 
         Raises
         ------
@@ -67,7 +67,8 @@ class Database:
                 session.add(row)
                 session.commit()
                 session.refresh(row)
-                return row.id  # ty:ignore[unresolved-attribute]
+                # Some rows do not have id so we must return None
+                return getattr(row, "id", None)
 
         except SQLAlchemyError as e:
             msg = f"Failed to write {row = } to database."

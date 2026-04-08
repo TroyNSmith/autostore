@@ -34,6 +34,29 @@ class StationaryIdentityLink(SQLModel, table=True):
     identity_id: int = Field(foreign_key="identity.id", primary_key=True)
 
 
+class CalculationGeometryLink(SQLModel, table=True):
+    """
+    Calculation to geometry link row.
+
+    Parameters
+    ----------
+    geometry_id
+        Foreign key to the associated geometry; part of the
+        composite primary key.
+    calculation_id
+        Foreign key to the associated calculation; part of
+        the composite primary key.
+    role
+        Role of the geometry in the calculation (e.g. "input", "output")
+    """
+
+    __tablename__ = "calculation_geometry_link"
+
+    geometry_id: int = Field(foreign_key="geometry.id", primary_key=True)
+    calculation_id: int = Field(foreign_key="calculation.id", primary_key=True)
+    role: str
+
+
 # --- Calculation Models ------------------------
 class CalculationRow(Calculation, SQLModel, table=True):
     """
@@ -41,6 +64,10 @@ class CalculationRow(Calculation, SQLModel, table=True):
 
     Parameters
     ----------
+    input_geometry_id
+        GeometryRow ID corresponding to input Geometry
+    output_geometry_id
+        GeometryRow ID corresponding to output Geometry
     program
         The quantum chemistry program used (e.g., "Psi4", "Gaussian").
     superprogram
@@ -92,10 +119,6 @@ class CalculationRow(Calculation, SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
 
-    input_geometry_id: int | None = Field(
-        default=None, foreign_key="geometry.id", index=True, nullable=False
-    )
-
     # Have to redeclare these fields for sql type verification.
     keywords: dict[str, str | dict | None] = Field(
         default_factory=dict,
@@ -119,7 +142,9 @@ class CalculationRow(Calculation, SQLModel, table=True):
     )
     scratch_dir: Path | None = Field(default=None, sa_column=Column(PathTypeDecorator))
 
-    input_geometry: "GeometryRow" = Relationship(back_populates="calculation_inputs")
+    geometries: list["GeometryRow"] = Relationship(
+        back_populates="calculations", link_model=CalculationGeometryLink
+    )
     energies: list["EnergyRow"] = Relationship(
         back_populates="calculation", cascade_delete=True
     )
@@ -240,8 +265,8 @@ class GeometryRow(Geometry, SQLModel, table=True):
     )
     # ^ Populated by event listener below
 
-    calculation_inputs: list["CalculationRow"] = Relationship(
-        back_populates="input_geometry"
+    calculations: list["CalculationRow"] = Relationship(
+        back_populates="geometries", link_model=CalculationGeometryLink
     )
     energies: list["EnergyRow"] = Relationship(
         back_populates="geometry", cascade_delete=True

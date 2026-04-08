@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from automol import Geometry
 from qcdata import CalcType, ProgramOutput
+from sqlalchemy import Select
 
 from autostore import Calculation, Database, models, qc
 
@@ -86,30 +87,57 @@ def test_energy(
     database: Database,
 ) -> None:
     """Test writing and reading of the energy and corresponding database rows."""
-    # Instantiate GeometryRow, write to database, and ensure correct hash population
+    # Instantiate GeometryRow & write to database
     geom_row = models.GeometryRow(**water.model_dump())
     geom_id = database.write(row=geom_row)
-    assert database.query(model=models.GeometryRow, hash=water.hash)[0] == geom_id
+    # Ensure id returned
+    assert geom_id is not None
 
-    # Instantiate CalculationRow, set input geometry id, write to database,
-    # and ensure correct calctype
+    # Instantiate CalculationRow & write to database
     calc_row = qc.prog_output.calc_row(water_xtb_energy_results)
-    calc_row.input_geometry_id = geom_id
-    calc_id = database.write(row=calc_row)  # ty:ignore[invalid-argument-type]
-    assert (
-        database.query(model=models.CalculationRow, calctype=CalcType.energy)[0]
-        == calc_id
-    )
+    calc_id = database.write(row=calc_row)
+    # Ensure id returned
+    assert calc_id is not None
 
-    # Instantiate EnergyRow, set geometry and calculation ids, write to database,
-    # and ensure correct energy value
+    # Instantiate CalculationGeometryLinkRow & write to database
+    calc_geom_link = models.CalculationGeometryLink(
+        geometry_id=geom_id, calculation_id=calc_id, role="input"
+    )
+    link_id = database.write(row=calc_geom_link)
+    # Ensure id not returned
+    assert link_id is None
+
+    # Instantiate EnergyRow & write to database
     ene_row = models.EnergyRow(
         geometry_id=geom_id,
         calculation_id=calc_id,
         value=water_xtb_energy_results.data.energy,
     )
     ene_id = database.write(row=ene_row)
-    assert database.query(model=models.EnergyRow, value=-5.062316802835694)[0] == ene_id
+    # Ensure id returned
+    assert ene_id is not None
+
+    with database.session() as session:
+        # Ensure CalculationRow was correctly written
+        calc_row = session.get(models.CalculationRow, calc_id)
+        assert calc_row is not None
+        assert calc_row.calctype == CalcType.energy
+
+        # Ensure GeometryRow was correctly written
+        geom_row = session.get(models.GeometryRow, geom_id)
+        assert geom_row is not None
+        assert geom_row.hash == water.hash
+
+        # Ensure Calculation and Geometry are linked
+        session.refresh(calc_row, attribute_names=["geometries"])
+        session.refresh(geom_row, attribute_names=["calculations"])
+        assert calc_row.geometries[0].id == geom_id
+        assert geom_row.calculations[0].id == calc_id
+
+        # Ensure EnergyRow was correctly written
+        ene_row = session.get(models.EnergyRow, ene_id)
+        assert ene_row is not None
+        assert ene_row.value == -5.062316802835694  # noqa: PLR2004
 
 
 def test_stationary(
@@ -118,27 +146,61 @@ def test_stationary(
     database: Database,
 ) -> None:
     """Test writing and reading of the energy and corresponding database rows."""
-    # Instantiate GeometryRow, write to database, and ensure correct hash population
-    input_geom_row = models.GeometryRow(**h2.model_dump())
-    input_geom_id = database.write(row=input_geom_row)
-    assert database.query(model=models.GeometryRow, hash=h2.hash)[0] == input_geom_id
+    # Instantiate input GeometryRow & write to database
+    inp_geom_row = models.GeometryRow(**h2.model_dump())
+    inp_geom_id = database.write(row=inp_geom_row)
+    assert inp_geom_id is not None
 
-    # Instantiate CalculationRow, set input geometry id, write to database,
-    # and ensure correct calctype
+    # Instantiate CalculationRow & write to database
     calc_row = qc.prog_output.calc_row(h2_gfnff_stationary_results)
-    calc_row.input_geometry_id = input_geom_id
-    calc_id = database.write(row=calc_row)  # ty:ignore[invalid-argument-type]
-    assert (
-        database.query(model=models.CalculationRow, calctype=CalcType.optimization)[0]
-        == calc_id
+    calc_id = database.write(row=calc_row)
+    assert calc_id is not None
+
+    # Instantiate output GeometryRow & write to database
+    out_geom_row = qc.prog_output.geom_row(h2_gfnff_stationary_results)
+    out_geom_id = database.write(row=out_geom_row)
+    assert out_geom_id is not None
+    # Test for the database.query() method
+    assert inp_geom_id not in database.query(
+        model=models.GeometryRow, **out_geom_row.model_dump()
     )
 
-    # Instantiate EnergyRow, set geometry and calculation ids, write to database,
-    # and ensure it's equal to input model
+    # Instantiate CalculationGeometryLinkRows & write to database
+    calc_inp_link = models.CalculationGeometryLink(
+        geometry_id=inp_geom_id, calculation_id=calc_id, role="input"
+    )
+    database.write(row=calc_inp_link)
+
+    calc_out_link = models.CalculationGeometryLink(
+        geometry_id=out_geom_id, calculation_id=calc_id, role="output"
+    )
+    database.write(row=calc_out_link)
+
+    # Instantiate StationaryPointRow & write to database
     stp_row = models.StationaryPointRow(
-        geometry_id=input_geom_id, calculation_id=calc_id, order=1
+        geometry_id=out_geom_id, calculation_id=calc_id, order=1
     )
     stp_id = database.write(row=stp_row)
-    stp_row_fetch = database.fetch(model=models.StationaryPointRow, row_id=stp_id)
+    assert stp_id is not None
+    # Test for the database.fetch() method
+    assert stp_row == database.fetch(model=models.StationaryPointRow, row_id=stp_id)
 
-    assert stp_row == stp_row_fetch
+    with database.session() as session:
+        # Ensure geometry input and geometry output are unique
+        statement = (
+            Select(models.CalculationGeometryLink)
+            .where(models.CalculationGeometryLink.calculation_id == calc_id)  # ty:ignore[invalid-argument-type]
+            .where(models.CalculationGeometryLink.geometry_id == inp_geom_id)  # ty:ignore[invalid-argument-type]
+        )
+        calc_inp_link = session.exec(statement).first()[0]  # ty:ignore[no-matching-overload]
+        assert calc_inp_link.role == "input"
+
+        statement = (
+            Select(models.CalculationGeometryLink)
+            .where(models.CalculationGeometryLink.calculation_id == calc_id)  # ty:ignore[invalid-argument-type]
+            .where(models.CalculationGeometryLink.geometry_id == out_geom_id)  # ty:ignore[invalid-argument-type]
+        )
+        calc_out_link = session.exec(statement).first()[0]  # ty:ignore[no-matching-overload]
+        assert calc_out_link.role == "output"
+
+        assert calc_inp_link != calc_out_link
