@@ -2,7 +2,7 @@
 
 import pytest
 from automol import Geometry
-from qcio import CalcType, DualProgramInput, Structure
+from qcdata import CalcType, DualProgramInput, Model, ProgramArgs, Structure
 
 from autostore import Calculation, calcn, qc
 from autostore.calcn import hash_registry
@@ -63,7 +63,7 @@ def standard_calc() -> Calculation:
         program="orca",
         method="b3lyp",
         basis="6-31g",
-        keywords={"maxiter": 100},
+        keywords={"maxiter": "100"},
         calctype="energy",
     )
 
@@ -74,10 +74,10 @@ def dual_calc() -> Calculation:
     return Calculation(
         program="crest",
         method="gfn2",
-        superprogram_keywords={"check": 3},
+        superprogram_keywords={"check": "3"},
         superprogram="geometric",
         calctype="optimization",
-        keywords={"test_key": True},
+        keywords={"test_key": "True"},
     )
 
 
@@ -93,17 +93,17 @@ def user_defined_hash(calc: Calculation) -> str:
 
 
 @pytest.mark.parametrize("calc_fixture", ["standard_calc", "dual_calc"])
-def test__qcio_roundtrip_equiv(
+def test__qc_roundtrip_equiv(
     calc_fixture: str, water: Geometry, request: pytest.FixtureRequest
 ) -> None:
     """Test conversion from Calculation -> ProgramInput -> Calculation."""
     orig_calc: Calculation = request.getfixturevalue(calc_fixture)
     ctype = CalcType(orig_calc.calctype) if orig_calc.calctype else CalcType.energy
 
-    prog_input = qc.program.from_rows(orig_calc, water, ctype)
-    driver = orig_calc.superprogram if orig_calc.superprogram else orig_calc.program
+    prog_input = qc.prog_input.from_automech(orig_calc, water, ctype)
+    driver = orig_calc.superprogram or orig_calc.program
 
-    round_calc, _ = qc.program.rows(prog_input, prog=driver)
+    round_calc = qc.prog_input.calculation_row(prog_input, prog=driver)
 
     hash_orig = calcn.calculation_hash(orig_calc, name="minimal")
     hash_round = calcn.calculation_hash(round_calc, name="minimal")
@@ -123,22 +123,22 @@ def test__dual_program_input() -> None:
     )
 
     prog_input = DualProgramInput(
-        calctype="optimization",  # ty:ignore[invalid-argument-type]
+        calctype=CalcType.optimization,
         structure=h2,
         subprogram="crest",
-        subprogram_args={
-            "model": {"method": "gfn2"},
-            "keywords": {"test": "value"},
-        },  # ty:ignore[invalid-argument-type]
-        keywords={"check": 3},
+        subprogram_args=ProgramArgs(
+            model=Model(method="gfn2"),
+            keywords={"test": "value"},
+        ),
+        keywords={"check": "3"},
     )
 
-    qc_calc, _ = qc.program.rows(prog_input, prog="geometric")
+    qc_calc = qc.prog_input.calculation_row(prog_input, prog="geometric")
 
     assert qc_calc.superprogram == "geometric"
     assert qc_calc.program == "crest"
     assert qc_calc.method == "gfn2"
-    assert qc_calc.superprogram_keywords == {"check": 3}
+    assert qc_calc.superprogram_keywords == {"check": "3"}
     assert qc_calc.keywords == {"test": "value"}
     assert qc_calc.calctype == "optimization"
 

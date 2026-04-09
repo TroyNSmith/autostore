@@ -5,10 +5,11 @@ preview = ["pixi-build"]
 
 [dependencies]
 automech-autostore = { path = "." }
-automol = "==0.0.6"
+automol = "==0.0.7"
 
 [pypi-dependencies]
-qcio = ">=0.16.2"
+qcdata = ">=0.17.0, <0.18"
+qccompute = ">=0.13.0, <0.14"
 
 [package]
 name = "automech-autostore"
@@ -42,9 +43,16 @@ myst-parser = "*"
 pydata-sphinx-theme = "*"
 sphinx-autodoc2 = "*"
 
+[feature.local.pypi-dependencies]
+automol = { path = "../automol", editable = true }
+
+[feature.local.pypi-options.dependency-overrides]
+automol = { path = "../automol", editable = true }
+
 [environments]
 default = { solve-group = "default" }
 dev = { features = ["dev", "docs"], solve-group = "default"}
+dev-local = { features = ["dev", "docs", "local"] }
 
 [feature.dev.tasks]
 # Manage pyproject.toml with uv
@@ -76,3 +84,7 @@ release = "tbump"
 # Setup and initialize this repository (only run once)
 setup = "./scripts/setup.sh"
 init = { cmd = "./scripts/init.sh", depends-on = ["setup"]}
+
+[feature.local.tasks]
+test-automol = "pytest ../automol/tests"
+test-autostore = "pytest tests"

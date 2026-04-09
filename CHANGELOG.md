@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
+### Added
+- Added superprogram fields to CalculationRow.
+- Updated qc interfaces to reflect update from qcio -> qcdata
+- Database row models moved from models/* to models.py
+- Added Database methods for adding, getting, and querying rows from database
+- CalculationGeometryLink table to associate Calculation with input/output Geometries
+  - Calculation Geometries can be accessed by CalculationRow.geometries
+  - Geometry Calculations can be accessed by GeometryRow.calculations
+- Placeholder MetricRow for storing identifying properties
+
+
+
 
 ## [0.0.4] - 2026-04-01
 

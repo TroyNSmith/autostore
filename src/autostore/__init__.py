@@ -2,18 +2,23 @@
 
 __version__ = "0.0.4"
 
-from . import fetch, qc, write
+from . import models, qc
 from .calcn import Calculation
 from .database import Database
-from .models import CalculationRow, EnergyRow, GeometryRow
+from .models import (
+    CalculationRow,
+    EnergyRow,
+    GeometryRow,
+    StationaryPointRow,
+)  # import core Row objects
 
 __all__ = [
+    "models",
     "qc",
-    "write",
-    "fetch",
     "Calculation",
     "Database",
     "CalculationRow",
     "EnergyRow",
     "GeometryRow",
+    "StationaryPointRow",
 ]
