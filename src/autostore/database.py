@@ -6,7 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from .models import *  # noqa: F403
-from .types import ModelT, RowID, RowIDs
+from .types import RowID, RowIDs, SQLModelT
 
 
 class Database:
@@ -41,7 +41,7 @@ class Database:
         """Create a new database session."""
         return Session(self.engine)
 
-    def add(self, *, row: ModelT) -> RowID | None:
+    def add(self, *, row: SQLModelT) -> RowID | None:
         """
         Add row to database.
 
@@ -71,7 +71,7 @@ class Database:
             msg = f"Failed to write {row = } to database."
             raise RuntimeError(msg) from e
 
-    def get(self, *, model: type[ModelT], row_id: RowID) -> ModelT:
+    def get(self, *, model: type[SQLModelT], row_id: RowID) -> SQLModelT:
         """
         Get row based on row id.
 
@@ -106,7 +106,9 @@ class Database:
 
             return row
 
-    def query(self, *, model: type[ModelT], **attributes: float | str | None) -> RowIDs:
+    def query(
+        self, *, model: type[SQLModelT], **attributes: float | str | None
+    ) -> RowIDs:
         """
         Query existing rows based on Class attributes.
 
