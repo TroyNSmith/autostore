@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import cast
 
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from .models import *  # noqa: F403
@@ -68,8 +68,8 @@ class Database:
                 # Some rows do not have id so we must return None
                 return getattr(row, "id", None)
 
-        except SQLAlchemyError as e:
-            msg = f"Failed to write {row = } to database."
+        except (SQLAlchemyError, IntegrityError) as e:
+            msg = f"Failed to add {row = }. Try using Database.get_or_add() instead."
             raise RuntimeError(msg) from e
 
     def delete(self, *, model: type[SQLModelT], row_id: RowID) -> None:
@@ -141,11 +141,44 @@ class Database:
 
             return row
 
+    def query_or_add(self, *, row: SQLModelT) -> RowIDs:
+        """
+        Query existing rows based on Class keywords. If None, adds row to database.
+
+        Parameters
+        ----------
+        row
+            Instance of a database model class.
+
+        Returns
+        -------
+            id corresponding to entry in model table or None if row does not assign id.
+
+        Raises
+        ------
+        SQLAlchemyError
+            Database row failed to write.
+        """
+        # Don't include id or null fields in query
+        unique_data = {
+            k: v for k, v in row.model_dump().items() if v is not None and k != "id"
+        }
+        row_ids = self.query(model=row.__class__, **unique_data)
+
+        if row_ids == []:
+            return [self.add(row=row)]
+
+        if len(row_ids) > 0:
+            return row_ids
+
+        msg = f"Failed to query or add {row = }."
+        raise RuntimeError(msg)
+
     def query(
         self, *, model: type[SQLModelT], **attributes: float | str | None
     ) -> RowIDs:
         """
-        Query existing rows based on Class attributes.
+        Query existing rows based on Class keywords.
 
         Parameters
         ----------
@@ -164,13 +197,12 @@ class Database:
             # Append Select constructs to statement
             for key, value in attributes.items():
                 if hasattr(model, key):
+                    # Skip NULL fields
+                    if value is None or key == "id":
+                        continue
                     statement = statement.where(getattr(model, key) == value)
 
             ids = [getattr(row, "id", None) for row in session.exec(statement).all()]
-
-            if None in ids:
-                msg = f"No id field returned from {model.__tablename__} query."
-                raise LookupError(msg)
 
             return cast("RowIDs", ids)
 

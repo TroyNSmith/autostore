@@ -60,7 +60,6 @@ exclude_type_checking_imports = true
 name = "AutoStore Layering"
 type = "layers"
 layers = [
-    "autostore.qc",
     "autostore.database",
     "autostore.models",
     "autostore.calcn",

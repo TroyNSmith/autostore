@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
+- Separated Provenance fields from Calculation fields and created new ProvenanceRow to store the separated data.
+- Removed standalone qc module; integrated specific functions as methods on Row objects (specifically CalculationRow, ProvenanceRow, and GeometryRow).
+- Updated ModelRow attributes to follow snake_case guidelines.
+- CalculationRow.calc_type: str -> str | None to reduce redundancy at user-level. calc_type should be set by lower-level methods.
+- Modified calcn.core.project to avoid accidentally modifying the original Calculation instance.
+- Modified calcn.core.hash_full to reflect refactoring of CalculationRow attributes.
+- Database.query updated to skip NULL values and ids; method now always returns a list[RowID | None].
+- Convenience methods on GeometryRow for converting to/from Geometry & Structure.
+- StationaryPointRow now cascade deletes on deletion of linked GeometryRow / CalculationRow
+- Updated RowIDs type to list[RowID | None] for flexibility of Database methods.
+- Reworked all of the tests to facilitate debugging.
+
 
 ## [0.0.5] - 2026-04-09
 ### Added

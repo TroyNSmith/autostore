@@ -13,7 +13,7 @@ SQLModelT = TypeVar("SQLModelT", bound=SQLModel)
 
 # Row ID Type Aliases
 RowID = int
-RowIDs = Sequence[RowID]
+RowIDs = Sequence[RowID | None]
 
 
 class FloatArrayTypeDecorator(TypeDecorator):

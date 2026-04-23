@@ -1,6 +1,5 @@
 """Calculation metadata."""
 
-from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -9,47 +8,45 @@ from .util import CalculationDict, hash_from_dict, project_keywords
 
 
 class Calculation(BaseModel):
-    """Calculation input parameters and metadata."""
+    """Calculation input parameters and metadata.
+
+    Attributes
+    ----------
+    # - Program Input -------
+    program
+        Quantum chemistry program used (psi4, ORCA, ...)
+    program_keywords
+        (Optional) Quantum chemistry program keywords.
+    super_program
+        (Optional) Geometry optimizer program (geomeTRIC, ...).
+    super_keywords
+        (Optional) Geometry optimizer keywords.
+    cmdline_args
+        (Optional) Command line arguments.
+    input
+        (Optional) Input file. [ PLACEHOLDER ]
+    files
+        (Optional) Additional input files. [ PLACEHOLDER ]
+    # - Methods -------------
+    calc_type
+        Calculation type (energy, optimization, ...)
+    method
+        Computational method (B3LYP, MP2, ...)
+    basis
+        (Optional) Basis set.
+    """
 
     # - Program Input -------
-    program: str = Field(description="Quantum chemistry program used (psi4, ORCA, ...)")
-    calctype: str = Field(description="Calculation type (energy, optimization, ...)")
-    method: str = Field(description="Computational method (B3LYP, MP2, ...)")
-    basis: str | None = Field(default=None, description="Basis set.")
-    keywords: dict[str, str | dict | None] = Field(
-        default_factory=dict, description="Quantum chemistry program keywords."
-    )
-    cmdline_args: list[str] = Field(
-        default_factory=list, description="Command line arguments."
-    )
-    input: str | None = Field(default=None, description="Input file.")
-    files: dict[str, str] = Field(
-        default_factory=dict, description="Additional input files."
-    )
-    # - SuperProgram Input --
-    superprogram: str | None = Field(
-        default=None, description="Geometry optimizer program used (geomeTRIC, ...)"
-    )
-    superprogram_keywords: dict[str, str | dict | None] = Field(
-        default_factory=dict, description="Geometry optimizer keywords."
-    )
-    # - Provenance ----------
-    program_version: str | None = Field(default=None, description="Program version.")
-    superprogram_version: str | None = Field(
-        default=None, description="Superprogram version, if applicable."
-    )
-    scratch_dir: Path | None = Field(default=None, description="Working directory.")
-    wall_time: float | None = Field(default=None, description="Wall time.")
-    hostname: str | None = Field(default=None, description="Name of host machine.")
-    hostcpus: int | None = Field(
-        default=None, description="Number of CPUs on host machine."
-    )
-    hostmem: int | None = Field(
-        default=None, description="Amount of memory on host machine."
-    )
-    extras: dict[str, str | dict | None] = Field(
-        default_factory=dict, description="Additional metadata."
-    )
+    program: str
+    program_keywords: dict[str, Any] = Field(default_factory=dict)
+    super_program: str | None = Field(default=None)
+    super_keywords: dict[str, Any] = Field(default_factory=dict)
+    cmdline_args: list[str] = Field(default_factory=list)
+
+    # - Methods -------------
+    calc_type: str | None = Field(default=None)
+    method: str
+    basis: str | None = Field(default=None)
 
 
 def projected_hash(calc: Calculation, template: Calculation | CalculationDict) -> str:
@@ -89,17 +86,22 @@ def project(
         Projected calculation dictionary.
     """
     # Dump template to dictionary
-    template = (
+    template_dct = (
         template.model_dump(exclude_unset=True)
         if isinstance(template, Calculation)
         else template
     )
-    # Include only keywords and extras from template
-    if "keywords" in template:
-        calc.keywords = project_keywords(
-            calc.keywords, template=template.get("keywords", {})
+    # Work on a deep copy to avoid accidental modifications
+    calc_copy = calc.model_copy(deep=True)
+    # Project program_keywords if 'keywords' is in the template
+    if "program_keywords" in template_dct:
+        calc_copy.program_keywords = project_keywords(
+            calc_copy.program_keywords,
+            template=template_dct.get("program_keywords", {}),
         )
-    if "extras" in template:
-        calc.extras = project_keywords(calc.extras, template=template.get("extras", {}))
-    # Include only fields from template
-    return calc.model_dump(exclude_none=True, include=set(template.keys()))
+    if "super_keywords" in template_dct:
+        calc_copy.super_keywords = project_keywords(
+            calc_copy.super_keywords, template=template_dct.get("super_keywords", {})
+        )
+    # Include fields from template
+    return calc_copy.model_dump(exclude_none=True, include=set(template_dct.keys()))
