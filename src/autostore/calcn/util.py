@@ -2,10 +2,10 @@
 
 import hashlib
 import json
-from typing import Union
+from typing import Any, Union
 
 KeywordDict = dict[str, Union[str, "KeywordDict", None]]
-CalculationDict = dict[str, str | list | KeywordDict | None]
+CalculationDict = dict[str, Any]
 
 
 def hash_from_dict(calc_dct: CalculationDict) -> str:

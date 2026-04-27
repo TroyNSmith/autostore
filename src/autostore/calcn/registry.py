@@ -59,13 +59,13 @@ def hash_full(calc: Calculation) -> str:
     """
     input_fields = {
         "program",
+        "program_keywords",
+        "super_program",
+        "super_keywords",
+        "cmdline_args",
+        "calc_type",
         "method",
         "basis",
-        "keywords",
-        "cmdline_args",
-        "files",
-        "calctype",
-        "program_version",
     }
     calc_dct = calc.model_dump(include=input_fields)
     return hash_from_dict(calc_dct)
@@ -90,7 +90,7 @@ def hash_minimal(calc: Calculation) -> str:
         "method": "METHOD",
         "basis": "BASIS",
     }
-    return projected_hash(calc, template)  # ty:ignore[invalid-argument-type]
+    return projected_hash(calc, template)
 
 
 def calculation_hash(calc: Calculation, name: str = "minimal") -> str:
