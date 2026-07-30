@@ -1,14 +1,10 @@
 """Autostorage models tests."""
 
-import time
-from unittest import mock
-
 import numpy as np
 import pytest
 from automol import Algorithm
 from numpy.random import Generator
 from scipy.spatial.transform import Rotation
-from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.exc import IntegrityError
 
 from autostorage import (
@@ -27,86 +23,9 @@ from autostorage import (
     TrajectoryRow,
     ValidationRow,
 )
-from autostorage.exc import DataIntegrityError, ResultShapeError
 from autostorage.models import CalculationTrajectoryLink
-from autostorage.types import Role
-
-
-def test__link_create_matches_rows_by_type(
-    calculation_row: CalculationRow, geometry_row: GeometryRow
-) -> None:
-    """Test that link.create() matches rows to relationships regardless of order."""
-    link = CalculationGeometryLink.create(
-        geometry_row, calculation_row, role=Role.INPUT
-    )
-
-    assert link.calculation is calculation_row
-    assert link.geometry is geometry_row
-    assert link.role == Role.INPUT
-
-
-def test__link_create_rejects_unmatched_row(
-    calculation_row: CalculationRow, model_row: ModelRow
-) -> None:
-    """Test that link.create() raises when a row has no matching relationship."""
-    with pytest.raises(ValueError, match="no unmatched relationship"):
-        CalculationGeometryLink.create(calculation_row, model_row, role=Role.INPUT)
-
-
-def test__link_create_rejects_ambiguous_row_type(
-    calculation_row: CalculationRow, geometry_row: GeometryRow
-) -> None:
-    """Test that link.create() raises when 2+ unfilled relationships share a type.
-
-    No current `BaseLink` subclass has two relationships to the same row
-    type, so this patches `sa_inspect` to simulate one, guarding the
-    ambiguity check against silently picking a relationship by declaration
-    order if such a link table is ever added.
-    """
-    real_relationships = list(sa_inspect(CalculationGeometryLink).relationships)
-    duplicate_geometry_rel = next(
-        rel for rel in real_relationships if rel.key == "geometry"
-    )
-
-    with mock.patch("autostorage.models.core.sa_inspect") as mock_inspect:
-        mock_inspect.return_value.relationships = [
-            *real_relationships,
-            duplicate_geometry_rel,
-        ]
-        with pytest.raises(ValueError, match="multiple unmatched relationships"):
-            CalculationGeometryLink.create(
-                geometry_row, calculation_row, role=Role.INPUT
-            )
-
-
-def test__row_timestamps_set_on_create(database: Database) -> None:
-    """Test that created_at/updated_at are populated by the database on insert."""
-    row = ModelRow(program="orca", method="xtb")
-    database.add(row)
-    database.commit()
-
-    assert row.created_at is not None
-    assert row.updated_at is not None
-
-
-def test__row_updated_at_advances_on_update(database: Database) -> None:
-    """Test that updated_at advances on a later commit while created_at doesn't."""
-    row = ModelRow(program="orca", method="xtb")
-    database.add(row)
-    database.commit()
-    created_at, updated_at = row.created_at, row.updated_at
-    assert created_at is not None
-    assert updated_at is not None
-
-    # SQLite's CURRENT_TIMESTAMP has one-second resolution.
-    time.sleep(1.1)
-    row.basis = "def2-svp"
-    database.add(row)
-    database.commit()
-
-    assert row.updated_at is not None
-    assert row.created_at == created_at
-    assert row.updated_at > updated_at
+from autostorage.utils.exc import DataIntegrityError, ResultShapeError
+from autostorage.utils.types import Role
 
 
 def test__model_null_safe_index_catches_duplicate(database: Database) -> None:
@@ -162,8 +81,8 @@ def test__calculation_geometry_role_properties(
         charge=0,
         spin=0,
     )
-    output_link = CalculationGeometryLink.create(
-        calculation_row, output_geometry, role=Role.OUTPUT
+    output_link = CalculationGeometryLink(
+        calculation=calculation_row, geometry=output_geometry, role=Role.OUTPUT
     )
     database.add(calculation_row)
     database.add(geometry_row)
@@ -190,11 +109,11 @@ def test__calculation_trajectory_role_properties(
     database.add(output_trajectory)
     database.commit()
 
-    input_link = CalculationTrajectoryLink.create(
-        calculation_row, input_trajectory, role=Role.INPUT
+    input_link = CalculationTrajectoryLink(
+        calculation=calculation_row, trajectory=input_trajectory, role=Role.INPUT
     )
-    output_link = CalculationTrajectoryLink.create(
-        calculation_row, output_trajectory, role=Role.OUTPUT
+    output_link = CalculationTrajectoryLink(
+        calculation=calculation_row, trajectory=output_trajectory, role=Role.OUTPUT
     )
     database.add(calculation_row)
     database.add(input_link)
@@ -303,31 +222,14 @@ def test__geometry_charge_and_spin_remain_mutable(
     assert fetched.spin == 1
 
 
-def test__geometry_unique_hash_catches_direct_duplicate_insert(
-    database: Database, geometry_row: GeometryRow
-) -> None:
-    """Test that a direct duplicate insert of identical geometry content is rejected."""
-    duplicate = GeometryRow(
-        symbols=list(geometry_row.symbols),
-        coordinates=np.array(geometry_row.coordinates),
-        charge=geometry_row.charge,
-        spin=geometry_row.spin,
-    )
-    database.add(geometry_row)
-    database.add(duplicate)
-
-    with pytest.raises(IntegrityError):
-        database.commit()
-
-
 def test__geometry_near_duplicate_is_not_deduped(
     database: Database, geometry_row: GeometryRow, rng: Generator
 ) -> None:
     """Test that a rotated/translated/jittered near-duplicate is a distinct row.
 
-    `geometry_hash` only catches bit-identical content; chemically-equivalent
-    but numerically distinct conformers are handled separately (and more
-    coarsely) by `events.py`'s InChI/conformer identity matching.
+    Chemically-equivalent but numerically distinct conformers are handled
+    separately (and more coarsely) by `events.py`'s InChI/conformer identity
+    matching.
     """
     near_duplicate = _jittered_copy(geometry_row, rng)
 
@@ -463,122 +365,6 @@ def test__stationary_identity_matches_by_kind_and_algorithm(
         is inchi
     )
     assert stationary.identity(kind="nonexistent") is None
-
-
-def test__stationary_order_hessian_first(
-    database: Database, calculation_row: CalculationRow, geometry_row: GeometryRow
-) -> None:
-    """Test stationary point order is validated when geometry Hessian is present.
-
-    Corrects a valid StationaryPointRow marked as invalid.
-    """
-    database.add(calculation_row)
-    database.add(geometry_row)
-
-    n = geometry_row.to_geometry().atom_count
-    hessian_row = HessianRow(
-        calculation=calculation_row,
-        geometry=geometry_row,
-        value=np.zeros((3 * n, 3 * n)),
-    )
-    database.add(hessian_row)
-
-    stationary = StationaryPointRow(
-        calculation=calculation_row, geometry=geometry_row, order=0, is_valid=False
-    )
-    database.add(stationary)
-    assert not stationary.is_valid
-
-    database.commit()
-    assert stationary.is_valid
-
-
-def test__stationary_order_hessian_second(
-    database: Database, calculation_row: CalculationRow, geometry_row: GeometryRow
-) -> None:
-    """Test stationary point order is validated when geometry Hessian is present.
-
-    Corrects an invalid StationaryPointRow marked as valid.
-    """
-    database.add(calculation_row)
-    database.add(geometry_row)
-
-    stationary = StationaryPointRow(
-        calculation=calculation_row, geometry=geometry_row, order=1, is_valid=True
-    )
-    database.add(stationary)
-    assert stationary.is_valid
-
-    n = geometry_row.to_geometry().atom_count
-    hessian_row = HessianRow(
-        calculation=calculation_row,
-        geometry=geometry_row,
-        value=np.zeros((3 * n, 3 * n)),
-    )
-    database.add(hessian_row)
-
-    database.commit()
-    assert not stationary.is_valid
-
-
-def test__hessian_delete_leaves_is_valid_correct_with_remaining_hessian(
-    database: Database, calculation_row: CalculationRow, geometry_row: GeometryRow
-) -> None:
-    """Test that deleting one of two agreeing Hessians keeps is_valid correct."""
-    database.add(calculation_row)
-    database.add(geometry_row)
-    database.commit()
-
-    n = geometry_row.to_geometry().atom_count
-    hessian1 = HessianRow(
-        calculation=calculation_row,
-        geometry=geometry_row,
-        value=np.zeros((3 * n, 3 * n)),
-    )
-    hessian2 = HessianRow(
-        calculation=calculation_row,
-        geometry=geometry_row,
-        value=np.zeros((3 * n, 3 * n)),
-    )
-    database.add(hessian1)
-    database.add(hessian2)
-
-    stationary = StationaryPointRow(
-        calculation=calculation_row, geometry=geometry_row, order=0
-    )
-    database.add(stationary)
-    database.commit()
-    assert stationary.is_valid
-
-    database.delete(hessian1)
-    assert stationary.is_valid
-
-
-def test__hessian_delete_leaves_is_valid_untouched_when_no_hessians_remain(
-    database: Database, calculation_row: CalculationRow, geometry_row: GeometryRow
-) -> None:
-    """Test that deleting the last Hessian doesn't reset is_valid to False."""
-    database.add(calculation_row)
-    database.add(geometry_row)
-    database.commit()
-
-    n = geometry_row.to_geometry().atom_count
-    hessian = HessianRow(
-        calculation=calculation_row,
-        geometry=geometry_row,
-        value=np.zeros((3 * n, 3 * n)),
-    )
-    database.add(hessian)
-
-    stationary = StationaryPointRow(
-        calculation=calculation_row, geometry=geometry_row, order=0
-    )
-    database.add(stationary)
-    database.commit()
-    assert stationary.is_valid
-
-    database.delete(hessian)
-    assert stationary.is_valid
 
 
 def test__step_null_safe_index_catches_barrierless_duplicate(

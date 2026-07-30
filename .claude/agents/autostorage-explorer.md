@@ -20,10 +20,8 @@ enforced by import-linter): `utils` > `database` > `merge` > `events` > `models`
   `ModelRow`, `CalculationRow`, `ValidationRow`, plus link tables). Base classes: `TimestampMixin`,
   `BaseRow`, `BaseResultRow`, `BaseLink`. Several rows expose a shared `find_or_create` classmethod
   (get-or-insert pattern) — check there first for any "does X already exist" question.
-- `events.py` — SQLAlchemy ORM event listeners: shape validation for Gradient/Hessian; geometry
-  order-consensus recompute (`revalidate_geometry_orders_on_insert_update`/`_on_hessian_delete` —
-  session-level `before_flush` listeners, not mapper events, because they mutate sibling rows that
-  may already be clean going into the flush); `verify_geometry_immutable_fields`;
+- `events.py` — SQLAlchemy ORM event listeners: shape validation for Gradient/Hessian;
+  `verify_geometry_immutable_fields`;
   `compute_geometry_hash`; auto-managed identity attachment (`add_inchi_identities`,
   `assign_conformer_ids`); `StepRow` stage-order/TS-consistency checks.
 - `database.py` — `Database`: SQLite engine/session manager.
@@ -41,8 +39,7 @@ enforced by import-linter): `utils` > `database` > `merge` > `events` > `models`
    a mapper event breaks under `Geometry`'s `validate_assignment=True` pydantic config — it
    corrupts SQLAlchemy's flush-time identity-key bookkeeping.
 2. **`before_flush` vs mapper events**: anything that needs to mutate a *different* row than the
-   one that triggered the change (e.g. recomputing `StationaryPointRow.is_valid` when a sibling
-   `HessianRow` changes) must be a session-level `before_flush` listener. A per-instance
+   one that triggered the change must be a session-level `before_flush` listener. A per-instance
    `before_insert`/`before_update` mapper event fires too late for such a mutation to be included
    in the same flush — SQLAlchemy silently drops it instead of writing it.
 3. **No migrations currently**: `migrations/` and `alembic.ini` were removed; `alembic` remains

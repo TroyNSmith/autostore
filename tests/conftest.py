@@ -14,7 +14,7 @@ from autostorage import (
     GeometryRow,
     ModelRow,
 )
-from autostorage.types import Role
+from autostorage.utils.types import Role
 
 
 @pytest.fixture
@@ -68,6 +68,6 @@ def calc_geo_link(
     calculation_row: CalculationRow, geometry_row: GeometryRow
 ) -> CalculationGeometryLink:
     """Fixture for CalculationGeometryLink."""
-    return CalculationGeometryLink.create(
-        calculation_row, geometry_row, role=Role.INPUT
+    return CalculationGeometryLink(
+        calculation=calculation_row, geometry=geometry_row, role=Role.INPUT
     )

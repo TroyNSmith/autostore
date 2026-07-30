@@ -82,9 +82,6 @@ why some of these are registered at the session level rather than per-model.
 - **Shape validation** — `GradientRow.value` must be `(3 * atom_count,)` and `HessianRow.value`
   must be `(3 * atom_count, 3 * atom_count)` for their linked geometry, or a
   `ResultShapeError` is raised.
-- **Stationary-point validity** — when a `HessianRow` is inserted, updated, or deleted,
-  `StationaryPointRow.is_valid` is recomputed from consensus among the geometry's Hessians
-  (comparing each stationary point's declared `order` to the Hessian-derived order).
 - **Geometry immutability** — `symbols`/`coordinates` cannot be changed on a `GeometryRow`
   after it's been inserted, since doing so would silently invalidate shape checks already run
   against it. `charge`/`spin` remain mutable.

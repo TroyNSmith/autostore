@@ -13,7 +13,7 @@ from autostorage import (
     GradientRow,
 )
 from autostorage.database import ModelRow, SelectStatement
-from autostorage.exc import ResultShapeError
+from autostorage.utils.exc import ResultShapeError
 
 
 def test__add(database: Database, model_row: ModelRow) -> None:

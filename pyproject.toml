@@ -67,7 +67,7 @@ layers = [
     "autostorage.database",
     "autostorage.events",
     "autostorage.models",
-    "autostorage.types | autostorage.exc",
+    "autostorage.utils",
 ]
 
 # Pytest configurations

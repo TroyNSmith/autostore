@@ -2,7 +2,6 @@
 
 __version__ = "0.0.12"
 
-from . import exc, types
 from .database import Database
 from .models import (
     CalculationGeometryLink,
@@ -20,7 +19,8 @@ from .models import (
     TrajectoryRow,
     ValidationRow,
 )
-from .types import CalcStatus, CalcType, Role
+from .utils import exc, types
+from .utils.types import CalcStatus, CalcType, Role
 
 __all__ = [
     "CalcStatus",

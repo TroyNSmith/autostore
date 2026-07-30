@@ -8,13 +8,45 @@ from typing import Any
 import numpy as np
 from sqlalchemy import LargeBinary
 from sqlalchemy.types import TypeDecorator
+from sqlmodel import Field
 
 __all__ = [
     "CalcStatus",
     "CalcType",
     "CompressedArrayTypeDecorator",
     "Role",
+    "_fk_field",
+    "_pk_field",
 ]
+
+
+def _pk_field() -> Any:  # noqa: ANN401
+    """Build a standard primary-key Field."""
+    return Field(default=None, primary_key=True)
+
+
+def _fk_field(
+    target: str,
+    *,
+    nullable: bool = False,
+    index: bool | None = None,
+    primary_key: bool = False,
+) -> Any:  # noqa: ANN401
+    """Build a standard foreign-key Field with ON DELETE CASCADE.
+
+    `index` defaults to `True`, except when `primary_key` is set, since a
+    composite primary key's leading column is already indexed by the key itself.
+    """
+    if index is None:
+        index = not primary_key
+    return Field(
+        default=None,
+        foreign_key=target,
+        ondelete="CASCADE",
+        nullable=nullable,
+        index=index,
+        primary_key=primary_key,
+    )
 
 
 class CompressedArrayTypeDecorator(TypeDecorator):

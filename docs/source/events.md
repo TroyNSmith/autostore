@@ -12,13 +12,12 @@ Listeners are registered two ways, and the choice between them matters:
 - **Session-level** (`before_flush` on `Session`) — runs once per flush, before any mapper-level
   events, with access to the whole pending change set (`session.new`/`dirty`/`deleted`).
 
-Three listeners below are session-level specifically because they need to **mutate a different,
-already-clean object** than the one that triggered them (e.g. deleting a `HessianRow` needs to
-update a `StationaryPointRow.is_valid` that isn't itself being inserted/updated/deleted).
-SQLAlchemy silently drops attribute changes made to other, already-clean objects from within a
-mapper-level `before_delete`/`before_insert`/`before_update` handler — those objects aren't part
-of the acting object's already-computed flush plan. A session-level `before_flush` listener runs
-before that plan is fixed, so changes it makes are picked up.
+Some listeners below are session-level specifically because they need to **mutate a different,
+already-clean object** than the one that triggered them. SQLAlchemy silently drops attribute
+changes made to other, already-clean objects from within a mapper-level
+`before_delete`/`before_insert`/`before_update` handler — those objects aren't part of the acting
+object's already-computed flush plan. A session-level `before_flush` listener runs before that
+plan is fixed, so changes it makes are picked up.
 
 ## Shape validation
 
@@ -43,43 +42,6 @@ it directly would let shape validation be silently skipped for a row that does h
 The same pattern reappears below for `StepRow`'s stage relationships
 (`_resolve_stage`).
 
-## Stationary-point validity
-
-```{eval-rst}
-.. autofunction:: autostorage.events.validate_geometry_orders
-   :no-index:
-.. autofunction:: autostorage.events.revalidate_geometry_orders_on_hessian_delete
-   :no-index:
-```
-
-`StationaryPointRow.is_valid` is derived, not set directly by application code. It's recomputed
-by `_recompute_geometry_stationary_validity(geometry)` whenever the set of `HessianRow`s
-attached to a geometry changes:
-
-1. Collect the geometry's `HessianRow`s (minus any passed via `excluding=`, see below).
-2. Compute each Hessian's `order` (the count of negative harmonic frequencies — see
-   {py:attr}`~autostorage.models.HessianRow.order`) and take the set of distinct orders.
-3. If more than one distinct order is present, raise `ValueError` — the geometry's Hessians
-   disagree, which can't be reconciled automatically.
-4. Otherwise, for every `StationaryPointRow` on that geometry, set `is_valid = (stationary.order
-   == expected_order)`, where `expected_order` is the one agreed-upon Hessian order.
-
-This recompute is wired to three triggers:
-
-- `validate_geometry_orders` — a mapper-level `before_insert`/`before_update` listener on both
-  `StationaryPointRow` and `HessianRow`, covering the common case of inserting/editing either
-  side.
-- `revalidate_geometry_orders_on_hessian_delete` — a **session-level** `before_flush` listener
-  that reacts to `HessianRow` deletions. It's session-level (not a mapper `before_delete`
-  listener) for the reason given in the section intro: it needs to write to
-  `StationaryPointRow.is_valid` on objects other than the one being deleted. It passes the
-  about-to-be-deleted Hessians as `excluding=` to `_recompute_geometry_stationary_validity`,
-  since `geometry.hessians` still includes them at `before_flush` time (the `DELETE` hasn't been
-  issued to the database yet).
-
-If a geometry has no Hessians, or no `StationaryPointRow`s, the recompute is a no-op — `is_valid`
-keeps whatever value it already had.
-
 ## Geometry immutability
 
 ```{eval-rst}
@@ -93,10 +55,9 @@ attempting to modify either raises `ValueError` on the next `flush()`/`commit()`
 which reports whether a field has pending added/deleted values since it was loaded; if the field
 has never been touched, `get_history` reports no change and the update passes.
 
-The reason: `GradientRow`/`HessianRow` shape checks (above) and Hessian order consensus are
-computed once, against the geometry as it existed when those results were saved. Silently
-allowing `symbols`/`coordinates` to change afterward would invalidate checks already performed
-without re-running them.
+The reason: `GradientRow`/`HessianRow` shape checks (above) are computed once, against the
+geometry as it existed when those results were saved. Silently allowing `symbols`/`coordinates`
+to change afterward would invalidate checks already performed without re-running them.
 
 ## Automatic identity attachment
 

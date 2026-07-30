@@ -1,6 +1,5 @@
 """SQLAlchemy ORM event listeners for validation and auto-managed identities."""
 
-from collections.abc import Iterable
 from typing import Any
 
 import numpy as np
@@ -8,9 +7,8 @@ from automol import Algorithm, geom
 from sqlalchemy import Integer, cast, event, func, select, tuple_
 from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Mapper, Session, object_session
-from sqlalchemy.orm.attributes import flag_modified, get_history
+from sqlalchemy.orm.attributes import get_history
 
-from .exc import DataIntegrityError, ResultShapeError
 from .models import (
     GeometryRow,
     GradientRow,
@@ -20,8 +18,8 @@ from .models import (
     StageRow,
     StationaryPointRow,
     StepRow,
-    _geometry_hash,
 )
+from .utils.exc import DataIntegrityError, ResultShapeError
 
 
 def _resolve_geometry(
@@ -89,85 +87,6 @@ def invalidate_hessian_frequency_cache(
         target.__dict__.pop("harmonic_frequencies", None)
 
 
-def _recompute_geometry_stationary_validity(
-    geometry: GeometryRow, *, excluding: Iterable[HessianRow] = ()
-) -> None:
-    """Recompute `StationaryPointRow.is_valid` for a geometry from its Hessians.
-
-    `excluding` skips Hessians pending deletion (still in `geometry.hessians` at
-    `before_flush` time since the DELETE hasn't been issued yet).
-    """
-    excluded_ids = {id(h) for h in excluding}
-    hessians = [h for h in geometry.hessians if id(h) not in excluded_ids]
-    if not hessians:
-        return
-
-    # A shape-invalid `value` (still pending its own `verify_hessian_shape`
-    # before_insert check later in this same flush) can't have its order computed;
-    # skip it here rather than raising `vibrational_analysis`'s raw ValueError.
-    orders: set[int] = set()
-    for h in hessians:
-        try:
-            orders.add(h.order)
-        except ValueError:
-            continue
-    if len(orders) > 1:
-        msg = f"Geometry Hessians do not agree on order. {orders = }."
-        raise DataIntegrityError(msg)
-
-    if orders and geometry.stationary_points:
-        expected_order = orders.pop()
-        for stationary in geometry.stationary_points:
-            stationary.is_valid = stationary.order == expected_order
-
-
-@event.listens_for(Session, "before_flush")
-def revalidate_geometry_orders_on_insert_update(
-    session: Session,
-    flush_context: Any,  # noqa: ANN401, ARG001
-    instances: Any,  # noqa: ANN401, ARG001
-) -> None:
-    """Recompute order consensus for a geometry when a Stationary/Hessian changes.
-
-    A session-level `before_flush` listener, not a per-instance `before_insert`/
-    `before_update` mapper event: the recompute below mutates sibling
-    `StationaryPointRow`s that may already be clean going into this flush, and a
-    mapper event fires too late in the flush cycle for that mutation to be
-    included — SQLAlchemy silently drops it (the "Attribute history events... will
-    not result in database updates" warning) instead of writing it.
-    """
-    candidates = (
-        obj
-        for obj in session.new | session.dirty
-        if isinstance(obj, StationaryPointRow | HessianRow)
-    )
-    geometries: dict[int, GeometryRow] = {}
-    for obj in candidates:
-        geometry = _resolve_geometry(obj)
-        if geometry is not None:
-            geometries[id(geometry)] = geometry
-
-    for geometry in geometries.values():
-        _recompute_geometry_stationary_validity(geometry)
-
-
-@event.listens_for(Session, "before_flush")
-def revalidate_geometry_orders_on_hessian_delete(
-    session: Session,
-    flush_context: Any,  # noqa: ANN401, ARG001
-    instances: Any,  # noqa: ANN401, ARG001
-) -> None:
-    """Recompute order consensus for a geometry when one of its Hessians is deleted."""
-    deleted_hessians = [obj for obj in session.deleted if isinstance(obj, HessianRow)]
-    if not deleted_hessians:
-        return
-
-    geometries = {h.geometry_id: h.geometry for h in deleted_hessians if h.geometry}
-    for geometry in geometries.values():
-        excluding = [h for h in deleted_hessians if h.geometry_id == geometry.id]
-        _recompute_geometry_stationary_validity(geometry, excluding=excluding)
-
-
 _IMMUTABLE_GEOMETRY_FIELDS = ("symbols", "coordinates")
 
 
@@ -187,26 +106,6 @@ def verify_geometry_immutable_fields(
         if history.added or history.deleted:
             msg = f"GeometryRow.{attr} cannot be changed after insert."
             raise DataIntegrityError(msg)
-
-
-@event.listens_for(GeometryRow, "before_insert")
-@event.listens_for(GeometryRow, "before_update")
-def compute_geometry_hash(
-    mapper: Mapper,  # noqa: ARG001
-    connection: Connection,  # noqa: ARG001
-    target: GeometryRow,
-) -> None:
-    """Populate `geometry_hash` from bit-identical geometry fields before saving.
-
-    Written via `target.__dict__[...]` + `flag_modified`, not `target.geometry_hash =
-    ...`: `Geometry`'s `validate_assignment=True` pydantic config corrupts SQLAlchemy's
-    flush-time identity-key bookkeeping when a plain attribute assignment happens
-    inside a mapper event, breaking every GeometryRow insert.
-    """
-    target.__dict__["geometry_hash"] = _geometry_hash(
-        target.symbols, target.coordinates, target.charge, target.spin
-    )
-    flag_modified(target, "geometry_hash")
 
 
 # Identity algorithms managed here, so other code knows not to copy/attach them
