@@ -5,8 +5,6 @@ from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
-from types import TracebackType
-from typing import Self
 
 from sqlalchemy import Select, create_engine, event
 from sqlalchemy import select as sa_select
@@ -197,19 +195,3 @@ class Database:
     def close(self) -> None:
         """Close the database connection."""
         self.engine.dispose()
-
-    def __enter__(self) -> Self:
-        """Enter a `with Database(...) as db:` block."""
-        return self
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_value: object,
-        traceback: TracebackType | None,
-    ) -> None:
-        """Roll back on exception, then close the database connection."""
-        del exc_value, traceback
-        if exc_type is not None:
-            self._session.rollback()
-        self.close()
